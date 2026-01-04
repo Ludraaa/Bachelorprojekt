@@ -1,0 +1,5 @@
+.svn
+.svnignore
+.nvimlog
+*.log
+*.tmp
