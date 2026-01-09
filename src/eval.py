@@ -115,9 +115,9 @@ def do_ned_for_dev(target_db, mode, qid_name_mapping):
         from refined.inference.processor import Refined
         #Changed from model_name="/data0/wikidata-workdir/models/refined"
         refined = Refined.from_pretrained(
-                                    model_name="../Data/Models/refined",
+                                    model_name="/extern/data/Models/refined",
                                     entity_set="wikidata",
-                                    data_dir="../Data/Models/refined",
+                                    data_dir="/extern/data/Models/refined",
                                     download_files=True,
                                     use_precomputed_descriptions=True
                                     )

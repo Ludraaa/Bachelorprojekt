@@ -238,7 +238,7 @@ def main():
     import argparse
     import os
     
-    parser = argparse.ArgumentParser(description: "Trains a model on one or multiple datasets. Uses a custom callback for evaluation using eval.py during training.")
+    parser = argparse.ArgumentParser(description= "Trains a model on one or multiple datasets. Uses a custom callback for evaluation using eval.py during training.")
 
     parser.add_argument(
         "--checkpoint_dir_path",

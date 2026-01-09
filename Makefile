@@ -27,11 +27,11 @@ help-adapt-dataset:
 	@echo "    For dev/test splits, use '--adapt_mode test' after splitting. This expects training set conversion beforehand."
 	@echo ""
 	@echo "  (1) Files read:"
-	@echo "      - [--input_file_path] (raw dataset input)"
+	@echo "      - [input_file_path] (raw dataset input)"
 	@echo ""
 	@echo "  (2) Files produced:"
-	@echo "      - /extern/output/[--jsonl_output_path] (converted JSONL)"
-	@echo "      - /extern/output/[--json_output_path] (converted JSON)"
+	@echo "      - [jsonl_output_path] (converted JSONL)"
+	@echo "      - [json_output_path] (converted JSON)"
 	@echo ""
 	@echo "  (3) Approx time:"
 	@echo "      - ~minutes to a few hours depending on dataset size"
@@ -41,10 +41,10 @@ help-adapt-dataset:
 	@echo "      - Disk: usually <1GB of outputs unless huge dataset"
 	@echo ""
 	@echo "  (5) Args:"
-	@echo "      --input_file_path: String - The path to the raw dataset input (jsonl)"
-	@echo "      --jsonl_output_path: String - The file path where the jsonl converted output should be saved. This can once again be used as an input for this target, to convert it further."
-	@echo "      --json_output_path: String - The file path where the json converted output should be saved."
-	@echo "      --adapt_mode: String ['train', 'test'] - Whether to convert to training set or test set. Warning:: !!Conversion to test set expects a train set as the input!!"
+	@echo "      - input_file_path= String - The path to the raw dataset input (jsonl)"
+	@echo "      - jsonl_output_path= String - The file path where the jsonl converted output should be saved. This can once again be used as an input for this target, to convert it further."
+	@echo "      - json_output_path= String - The file path where the json converted output should be saved."
+	@echo "      - adapt_mode= String ['train', 'test'] - Whether to convert to training set or test set. Warning:: !!Conversion to test set expects a train set as the input!!"
 	@echo ""
 
 
@@ -52,20 +52,22 @@ help-adapt-dataset:
 # Dataset adaptation target
 # -----------------------------------
 input_file_path      ?= /extern/data/Datasets/Qald7/original_files/train.jsonl
-jsonl_output_path	?= adapted_Qald7_train.jsonl
-json_output_path   ?= adapted_Qald7_train.json
+jsonl_output_path	?= /workspace/output/adapted_Qald7_train.jsonl
+json_output_path   ?= /workspace/output/adapted_Qald7_train.json
 adapt_mode       ?= train
 
 adapt-dataset:
+	mkdir -p $(dir $(jsonl_output_path))
+	mkdir -p $(dir $(json_output_path))
 	@echo "Running dataset adaptation:"
 	@echo "  input_file_path:  $(input_file_path)"
-	@echo "  jsonl_output_path:  /extern/output/$(jsonl_output_path)"
-	@echo "  json_output_path:   /extern/output/$(json_output_path)"
-	@echo "  adapt_mode:   $(adapt_mode)"
+	@echo "  jsonl_output_path:  $(jsonl_output_path)"
+	@echo "  json_output_path:  $(json_output_path)"
+	@echo "  adapt_mode:  $(adapt_mode)"
 	/opt/venv/bin/python3.10 src/adapt_dataset.py \
 	    --input_file_path $(input_file_path) \
-	    --jsonl_output_path /extern/output/$(jsonl_output_path) \
-	    --json_output_path /extern/output/$(json_output_path) \
+	    --jsonl_output_path $(jsonl_output_path) \
+	    --json_output_path $(json_output_path) \
 	    --adapt_mode $(adapt_mode)
 
 
@@ -78,11 +80,11 @@ help-split-dataset:
 	@echo "    The size of the second split can be controlled using the --test_ratio flag (float from 0 to 1)."
 	@echo ""
 	@echo "  (1) Files read:"
-	@echo "      - [--input_file_path] (raw dataset input)"
+	@echo "      - [input_file_path] (raw dataset input)"
 	@echo ""
 	@echo "  (2) Files produced:"
-	@echo "      - /extern/output/[--output_dir]/dev_split.jsonl (dev (or train) split)"
-	@echo "      - /extern/output/[--output_dir]/test_split.jsonl (test split)"
+	@echo "      - [output_dir]/dev_split.jsonl (dev (or train) split)"
+	@echo "      - [output_dir]/test_split.jsonl (test split)"
 	@echo ""
 	@echo "  (3) Approx time:"
 	@echo "      - Should be almost instant."
@@ -92,26 +94,27 @@ help-split-dataset:
 	@echo "      - Disk: Exact same as input size, so usually low 100Mbs to few Gbs in extreme cases."
 	@echo ""
 	@echo "  (5) Args:"
-	@echo "      --input_file_path: String - The path to the raw dataset input (jsonl)"
-	@echo "      --output_dir: String - The file path to the directory, where the two output files will be saved to. See section '(2) Files produced' for further information."
-	@echo "      --test_ratio: float [0..1] - The size ratio of the test split with respect to the dev/train split. Setting this to 0.8 will lead to: test: 0.8 and dev/train: 0.2 of the original input size."
+	@echo "      - input_file_path= String - The path to the raw dataset input (jsonl)"
+	@echo "      - output_dir= String - The file path to the directory, where the two output files will be saved to. See section '(2) Files produced' for further information."
+	@echo "      - test_ratio= float [0..1] - The size ratio of the test split with respect to the dev/train split. Setting this to 0.8 will lead to: test: 0.8 and dev/train: 0.2 of the original input size."
 	@echo ""
 
 # -----------------------------------
 # Dataset adaptation target
 # -----------------------------------
 # input_file_path reused from adapt_dataset
-output_dir  ?= split_dataset/
+output_dir  ?= /workspace/output/split_dataset/
 test_ratio ?= 0.5
 
 split-dataset:
+	mkdir -p $(dir $(output_dir))
 	@echo "Running dataset split:"
 	@echo "  input:  $(input_file_path)"
-	@echo "  output directory:  /extern/output/$(output_dir)"
-	@echo "  test ratio:   $(test_ratio)"
+	@echo "  output directory:  $(output_dir)"
+	@echo "  test ratio:  $(test_ratio)"
 	/opt/venv/bin/python src/split_dataset.py \
 	    --input_file_path $(input_file_path) \
-	    --output_dir /extern/output/$(output_dir) \
+	    --output_dir $(output_dir) \
 	    --test_ratio $(test_ratio)
 
 # -----------------------------------
@@ -122,12 +125,12 @@ help-eval:
 	@echo "  Description: Evaluates given model on given Dataset. Calculates EM, F1, and can also compute EM with respect to another model's predictions or save the predictions.."
 	@echo ""
 	@echo "  (1) Files read:"
-	@echo "      - [--checkpoint_dir] (path to the folder containing model files)"
-	@echo "      - [--data_dir] (path to the folder containing dev and test set of the dataset (both have to exist. If you only have one of the two, duplicate and rename it appropriately! )"
-	@echo "      - [--comparison_path] (path to a predictions file previously produced using this target (and the --save_path flag))"
+	@echo "      - [checkpoint_dir] (path to the folder containing model files)"
+	@echo "      - [data_dir] (path to the folder containing dev and test set of the dataset (both have to exist. If you only have one of the two, duplicate and rename it appropriately! )"
+	@echo "      - [comparison_path] (path to a predictions file previously produced using this target (and the --save_path flag))"
 	@echo ""
 	@echo "  (2) Files produced:"
-	@echo "      - /extern/output/[--save_path] if set. Otherwise, this target does not produce any files."
+	@echo "      - [save_path] if set. Otherwise, this target does not produce any files."
 	@echo ""
 	@echo "  (3) Approx time:"
 	@echo "      - Varies greatly depending on Dataset size and model. This could take as little as 15 minutes or as much as 24 hours. Most times it takes about 30-60 minutes. The original WikiSP models take 10x as long as the retrained ones."
@@ -137,13 +140,13 @@ help-eval:
 	@echo "      - Disk: About as much as the input dataset, if saving is enabled. Otherwise none.."
 	@echo ""
 	@echo "  (5) Args:"
-	@echo "      --checkpoint_dir: String - The path to the directory containing the model files."
-	@echo "      --data_dir: String - The file path to the directory, where the datasets dev and test set are saved. See section '(1) Files read' for more information."
-	@echo "      --eval_mode: String ['dev', 'test'] - whether to evaluate on the dev or test set of the dataset."
-	@echo "      --get_current_results: bool (Default: True) - whether to evaluate against the dataset's saved gold results (possibly outdated), or the fetch gold results live from wikidata."
-	@echo "      --save_path: String (Default: False) - whether to save the model's prediction (for later comparison)."
-	@echo "      --comparison_path: String (Default: False) - whether to compare the model's predictions to a different model's predictions (previously saved using the --save_path flag of this target) in addition to the dataset's gold predictions."
-	@echo "      --mongo_port: int - The port of the mongodb session to be used. Start (and kill)  this using the provided target."
+	@echo "      - checkpoint_dir: String - The path to the directory containing the model files."
+	@echo "      - data_dir: String - The file path to the directory, where the datasets dev and test set are saved. See section '(1) Files read' for more information."
+	@echo "      - eval_mode: String ['dev', 'test'] - whether to evaluate on the dev or test set of the dataset."
+	@echo "      - get_current_results: bool (Default: True) - whether to evaluate against the dataset's saved gold results (possibly outdated), or the fetch gold results live from wikidata."
+	@echo "      - save_path: String (Default: False) - whether to save the model's prediction (for later comparison)."
+	@echo "      - comparison_path: String (Default: False) - whether to compare the model's predictions to a different model's predictions (previously saved using the --save_path flag of this target) in addition to the dataset's gold predictions."
+	@echo "      - mongo_port: int - The port of the mongodb session to be used. Start (and kill)  this using the provided target."
 	@echo ""
 
 
@@ -151,18 +154,19 @@ help-eval:
 # -----------------------------------
 # eval target
 # -----------------------------------
-checkpoint_dir      ?= model_dir
-data_dir  ?= dataset_dir
-eval_mode ?= dev
+checkpoint_dir      ?= /extern/data/Models/MyModels/MyWSP_WWQ_Q7_EqualAlpaca
+data_dir  ?= /extern/data/Datasets/Qald7/
+eval_mode ?= test
 get_current_results ?= True
-save_path ?= False
+save_path ?= output/PredictedResults/eval_predictions.json
 comparison_path ?= False
 mongo_port ?= 27016
 
 eval:
-	@echo "Starting MongoDB for eval on port $(mongo_port). The relevant db file lives at /extern/output/Mongo/mongo_eval_db."
-	mkdir -p /extern/output/Mongo/mongo_eval_db
-	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /extern/output/Mongo/mongo_eval_db --bind_ip localhost --port $(mongo_port) > /extern/output/Mongo/mongo_eval.log 2>&1 &
+	mkdir -p $(dir $(save_path))
+	@echo "Starting MongoDB for eval on port $(mongo_port). The relevant db file lives at /workspace/output/Mongo/mongo_eval_db."
+	mkdir -p /workspace/output/Mongo/mongo_eval_db
+	nohup /extern/data/Mongo/mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /workspace/output/Mongo/mongo_eval_db --bind_ip localhost --port $(mongo_port) > /workspace/output/Mongo/mongo_eval.log 2>&1 &
 	@sleep 2
 	@echo "Running eval:"
 	@echo "  checkpoint_dir:  $(checkpoint_dir)"
@@ -199,8 +203,8 @@ help-train:
 	@echo "      - optionally: [--callback_comparison_path2] (prediction file Nr. 2 to be evaluated against)"
 	@echo ""
 	@echo "  (2) Files produced:"
-	@echo "      - /extern/output/[--checkpoint_dir_path] (directory where the training checkpoints will be saved)"
-	@echo "      - /extern/output/[--callback_output_path] (csv where the training results will be saved)"
+	@echo "      - [--checkpoint_dir_path] (directory where the training checkpoints will be saved)"
+	@echo "      - [--callback_output_path] (csv where the training results will be saved)"
 	@echo ""
 	@echo "  (3) Approx time:"
 	@echo "      - ~a few hours to days, depending on parameters. Using a decently sized (~30k) dataset, 5 epochs and dual evaluation 4 times per epoch, it takes around one day."
@@ -208,7 +212,7 @@ help-train:
 	@echo "  (4) Approx RAM & disk:"
 	@echo "      - RAM: ~TODO!!!!!!!!!!!!!1GB depending on dataset size"
 	@echo "      - Disk: Each combined model (from the checkpoint) takes up about 13GB."
-	@echo "        Training for 5 epochs and saving/evaluating 4 times per epoch needs a total of 20 * 13GB" = 260GB for the models alone. The total storage needed seems to be around 300GB when accounting the checkpoints themselves as well.
+	@echo "        Training for 5 epochs and saving/evaluating 4 times per epoch needs a total of 20 * 13GB = 260GB for the models alone. The total storage needed seems to be around 300GB when accounting the checkpoints themselves as well."
 	@echo "      - GPU: 1 x 46GB Vram for Training + 1 more for evaluation (optional, but recommended)"
 	@echo ""
 	@echo "  (5) Args:"
@@ -236,7 +240,7 @@ help-train:
 # -----------------------------------
 # train target
 # -----------------------------------
-checkpoint_dir_path ?= /Models/MyWikiSP_WWQ_Q7_LittleAlpaca
+checkpoint_dir_path ?= /workspace/output/MyWikiSP_WWQ_Q7_LittleAlpaca
 datasets ?= /extern/data/Datasets/WikiWebQuestions/TrainingData/train.json /extern/data/Datasets/Qald7/TrainingData/train.json Alpaca
 scalings ?= 5 20 0.1
 model_name ?= MyWikiSP_WWQ_Q7_LittleAlpaca-
@@ -245,7 +249,7 @@ acc_steps ?= 16
 epochs ?= 5
 eval_steps_per_epoch ?= 2
 eval_callback ?= True
-callback_output_path ?= /TrainingResults/MyWikiSP_WWQ_Q7_LittleAlpaca.csv
+callback_output_path ?= /workspace/output/MyWikiSP_WWQ_Q7_LittleAlpaca_TrainingResults.csv
 callback_data_path ?= /extern/data/Datasets/WikiWebQuestions
 callback_eval_mode ?= dev
 callback_comparison_path ?= /extern/data/PredictedResults/local_wikisp_q7_wwq_dev.jsonl
@@ -257,18 +261,20 @@ eval_port2 ?= 27018
 
 
 train:
-	@echo "Starting MongoDB for eval callback on port $(eval_port). The relevant db file lives at /extern/output/Mongo/eval_callback_1_db."
-	mkdir -p /extern/output/Mongo/eval_callback_1_db  && 
-	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /extern/output/Mongo/eval_callback_1_db --bind_ip localhost --port $(eval_port) > /extern/output/Mongo/eval_callback_1.log 2>&1 &
+	mkdir -p $(dir $(checkpoint_dir_path))
+	mkdir -p $(dir $(callback_output_path))
+	@echo "Starting MongoDB for eval callback on port $(eval_port). The relevant db file lives at /workspace/output/Mongo/eval_callback_1_db."
+	mkdir -p /workspace/output/Mongo/eval_callback_1_db  && 
+	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /workspace/output/Mongo/eval_callback_1_db --bind_ip localhost --port $(eval_port) > /workspace/output/Mongo/eval_callback_1.log 2>&1 &
 	
-	@echo "Starting MongoDB for eval callback on port $(eval_port2). The relevant db file lives at /extern/output/Mongo/eval_callback_2_db."
+	@echo "Starting MongoDB for eval callback on port $(eval_port2). The relevant db file lives at /workspace/output/Mongo/eval_callback_2_db."
 	
-	mkdir -p /extern/output/Mongo/eval_callback_2_db &&
-	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /extern/output/Mongo/eval_callback_2_db --bind_ip localhost --port $(eval_port2) > /extern/output/Mongo/eval_callback_2.log 2>&1 &
+	mkdir -p /workspace/output/Mongo/eval_callback_2_db &&
+	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /workspace/output/Mongo/eval_callback_2_db --bind_ip localhost --port $(eval_port2) > /workspace/output/Mongo/eval_callback_2.log 2>&1 &
 	
 	@sleep 2
 	@echo "Running train.py:"
-	@echo "  checkpoint_dir_path: /extern/output/$(checkpoint_dir_path)"
+	@echo "  checkpoint_dir_path: $(checkpoint_dir_path)"
 	@echo "  datasets: $(datasets)"
 	@echo "  scalings: $(scalings)"
 	@echo "  model_name: $(model_name)"
@@ -277,7 +283,7 @@ train:
 	@echo "  epochs: $(epochs) "
 	@echo "  eval_steps_per_epoch: $(eval_steps_per_epoch) "
 	@echo "  eval_callback: $(eval_callback) "
-	@echo "  callback_output_path: /extern/output/$(callback_output_path) "
+	@echo "  callback_output_path: $(callback_output_path) "
 	@echo "  callback_data_path: $(callback_data_path) "
 	@echo "  callback_eval_mode: $(callback_eval_mode) "
 	@echo "  callback_comparison_path: $(callback_comparison_path) "
@@ -287,7 +293,7 @@ train:
 	@echo "  eval_port: $(eval_port) "
 	@echo "  eval_port2: $(eval_port2) "
 	/opt/venv/bin/python src/train.py \
-	    --checkpoint_dir_path /extern/output/$(checkpoint_dir_path) \
+	    --checkpoint_dir_path $(checkpoint_dir_path) \
 	    --datasets $(datasets) \
 	    --scalings $(scalings) \
 	    --model_name $(model_name) \
@@ -296,7 +302,7 @@ train:
 	    --epochs $(epochs) \
 	    --eval_steps_per_epoch $(eval_steps_per_epoch) \
 	    --eval_callback $(eval_callback) \
-	    --callback_output_path /extern/output/$(callback_output_path) \
+	    --callback_output_path $(callback_output_path) \
 	    --callback_data_path $(callback_data_path) \
 	    --callback_eval_mode $(callback_eval_mode) \
 	    --callback_comparison_path $(callback_comparison_path) \
@@ -307,8 +313,8 @@ train:
 	    --eval_port2 $(eval_port2)
 	
 	@echo "Cleaning up DBs.."
-	rm -rf /extern/output/Mongo/eval_callback_1_db
-	rm -rf /extern/output/Mongo/eval_callback_2_db
+	rm -rf /workspace/output/Mongo/eval_callback_1_db
+	rm -rf /workspace/output/Mongo/eval_callback_2_db
 	@echo "All Done! Check the training results in $(callback_output_path) if callback was enabled. The corresponding checkpoints can be found in $(checkpoint_dir_path)."
 
 # -----------------------------------
@@ -339,7 +345,7 @@ help-kill-mongo:
 # kill-mongo target
 # -----------------------------------
 
-db_dir_path ?= /extern/output/Mongo/mongo_eval_db
+db_dir_path ?= /workspace/output/Mongo/mongo_eval_db
 
 kill-mongo:
 	@echo "Running kill-mongo:"

@@ -24,7 +24,7 @@ def main():
             )
 
     parser.add_argument(
-            "--output_dir"
+            "--output_dir",
             type=str,
             required=True,
             help="Path to the directory where the split files should be written. This is created if it doesnt exist."
@@ -48,7 +48,7 @@ def main():
     test_path = os.path.join(args.output_dir, "test_split.jsonl")
 
     print("Splitting dataset and saving new JSONL files...")
-    dataset = load_dataset("json", data_files=os.path.join(args.input_file_path), split="train")
+    dataset = load_dataset("json", data_files=os.path.join(args.input_file_path), split="train", cache_dir="/workspace/hf-cache")
    
     test_valid = dataset.train_test_split(test_size=args.test_ratio, seed=42)
 
@@ -56,7 +56,12 @@ def main():
     test_set = test_valid["test"]
 
     # Only split + save if they don’t already exist
-    if not all(os.path.exists(p) for p in [train_path, dev_path, test_path]):
+    if not all(os.path.exists(p) for p in [dev_path, test_path]):
         # Save as JSONL
         dev_set.to_json(dev_path, lines=True)
         test_set.to_json(test_path, lines=True)
+        
+    print("Done")
+
+if __name__ == "__main__":
+    main()
