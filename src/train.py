@@ -87,10 +87,10 @@ class DualEvalCallback(TrainerCallback):
                   save_path, comparison_path, is_wwq, mongo_port, process_index):
 
         #path to eval venv (training uses a different venv)
-        EVAL_PYTHON = "/work/dlclarge2/drayerl-Bachelorprojekt_WS/venv/bin/python"
+        EVAL_PYTHON = "/opt/venv/bin/python"
         
         #path to the eval script
-        EVAL_SCRIPT = "/work/dlclarge2/drayerl-Bachelorprojekt_WS/src/eval.py"
+        EVAL_SCRIPT = "/workspace/src/eval.py"
 
         cmd = [
             EVAL_PYTHON, EVAL_SCRIPT,
@@ -141,8 +141,8 @@ class DualEvalCallback(TrainerCallback):
 
         ckpt_path = get_latest_checkpoint(checkpoint_dir)
             
-        VENV_PATH = "/work/dlclarge2/drayerl-Bachelorprojekt_WS/venv/bin/python"
-        SCRIPT_PATH = "/work/dlclarge2/drayerl-Bachelorprojekt_WS/src/merge.py"
+        VENV_PATH = "/opt/venv/bin/python"
+        SCRIPT_PATH = "/workspace/src/merge.py"
 
         merge_cmd = [
             VENV_PATH,
@@ -230,9 +230,6 @@ class DualEvalCallback(TrainerCallback):
             )
 
 
-def none_if_empty(x):
-    return None if not x or x == "None" else x
-
 def main():
 
     import argparse
@@ -308,63 +305,54 @@ def main():
     parser.add_argument(
         "--callback_output_path",
         type=str,
-        required=True,
         help="Path to a csv file for the training results to be written."
     )
 
     parser.add_argument(
         "--callback_data_path",
         type=str,
-        required=True,
         help="Path to the directory containing dev and test set of the dataset to be evaluated during the callback."
     )
 
     parser.add_argument(
         "--callback_eval_mode",
         type=str,
-        required=True,
         help="Whether to evaluate on the dev or test set."
     )
 
     parser.add_argument(
         "--callback_comparison_path",
         type=str,
-        required=True,
         help="Path to a saved predictions file that is to be compared to during callback."
     )
 
     parser.add_argument(
         "--eval_port",
         type=str,
-        required=True,
         help="port to be used for the first eval mongodb."
     )
 
     parser.add_argument(
         "--callback_data_path2",
         type=str,
-        required=True,
         help="Path to the directory containing dev and test set of the dataset to be evaluated during the callback."
     )
 
     parser.add_argument(
         "--callback_eval_mode2",
         type=str,
-        required=True,
         help="Whether to evaluate on the dev or test set."
     )
 
     parser.add_argument(
         "--callback_comparison_path2",
         type=str,
-        required=True,
         help="Path to a saved predictions file that is to be compared to during callback."
     )
 
     parser.add_argument(
         "--eval_port2",
         type=str,
-        required=True,
         help="port to be used for the second eval mongodb."
     )
     
@@ -372,6 +360,22 @@ def main():
     
     if len(args.datasets) != len(args.scalings):
         parser.error("Length of --datasets and --scalings must match")
+    
+    # check for missing arguments when eval callback is true
+    if args.eval_callback:
+        missing = []
+        if args.callback_output_path is None:
+            missing.append("--callback_output_path")
+        if args.callback_data_path is None:
+            missing.append("--callback_data_path")
+        if args.callback_eval_mode is None:
+            missing.append("--callback_eval_mode")
+
+        if missing:
+            parser.error(
+                "Missing required arguments when --eval_callback is set: "
+                + ", ".join(missing)
+            )
 
     checkpoint_dir = args.checkpoint_dir_path
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -386,7 +390,7 @@ def main():
 
     for ds, factor in zip(args.datasets, args.scalings):
         print(f"Loading dataset: {ds}")
-        factor = float(int(factor))
+        factor = float(factor)
         ds_original = None
         if ds.lower() == "alpaca":
             ds_original = load_dataset("tatsu-lab/alpaca")["train"]
@@ -394,6 +398,7 @@ def main():
             ds_original = load_dataset("json", data_files=ds)["train"]
 
         if factor >= 1:
+            factor = int(round(factor))
             print(f"Upsampling {len(ds_original)} samples by factor {factor} => {int(len(ds_original) * factor)}")
             loaded_datasets.append(concatenate_datasets([ds_original] * factor))
         elif factor < 1:
@@ -478,7 +483,7 @@ def main():
         #print(tokenizer.decode(labels))
 
         #get the index of the first padding
-        first_pad = labels.index(2) if 2 in labels else None
+        first_pad = labels.index(pad_id) if pad_id in labels else None
         
 
         for i in range(len(labels)):
@@ -486,12 +491,12 @@ def main():
             if i < to_be_masked:
                 #should be masked
                 labels[i] = -100
-            elif labels[i] == 2:
+            elif labels[i] == pad_id:
                 #is a padding -> should also be masked
                 labels[i] = -100
 
         #set the first padding to unmasked, to tell the model when to stop
-        labels[first_pad] = 2
+        labels[first_pad] = pad_id
 
 
         tokens["labels"] = labels
@@ -501,9 +506,13 @@ def main():
 
     from transformers import AutoModelForCausalLM
 
+    import torch
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     raw_model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        device_map="auto",
+        device_map=None,
         torch_dtype="auto",  # automatically use float16 if supported    
         local_files_only=True
     )
@@ -528,6 +537,8 @@ def main():
     #Attach fresh Lora Adapter last
     model = get_peft_model(raw_model, lora_config)
     print("Attached fresh Lora Adapter to base model")
+    model.to(device)
+    print("Moved Peft Model to: ", device)
     del raw_model
 
 
@@ -560,13 +571,22 @@ def main():
             eval_mode_1 = args.callback_eval_mode,
             comparison_path_1 = args.callback_comparison_path,
 
-            data_path_2 = none_if_not_empty(args.callback_data_path2),
-            eval_mode_2 = none_if_not_empty(args.callback_eval_mode2),
-            comparison_path_2 = none_if_not_empty(args.callback_comparison_path2),
+            data_path_2 = args.callback_data_path2,
+            eval_mode_2 = args.callback_eval_mode2,
+            comparison_path_2 = args.callback_comparison_path2,
 
             mongo_port1 = args.eval_port,
             mongo_port2 = args.eval_port2
         )
+
+
+    # handle cpu vs gpu
+    bf16 = False
+    fp16 = False
+
+    if device.type == "cuda":
+        bf16 = torch.cuda.is_bf16_supported()
+        fp16 = not bf16
 
     # Training arguments
     training_args = TrainingArguments(
@@ -574,7 +594,8 @@ def main():
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=acc_steps,
         learning_rate=learning_rate,
-        bf16=True,
+        bf16=bf16,
+        fp16=fp16,
         num_train_epochs=args.epochs,
         logging_steps=ceil(eval_steps / 3),
         save_strategy="steps",
@@ -602,7 +623,6 @@ def main():
         )
 
     if True:
-        print("Training from checkpoint: ", latest_checkpoint, flush=True)
         trainer.train()
 
 if __name__ == "__main__":

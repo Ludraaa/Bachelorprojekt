@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import torch
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 import argparse
 import os
@@ -73,6 +73,10 @@ def main():
 
     print(f"Saving merged model to {merged_output_path}...")
     merged_model.save_pretrained(merged_output_path)
+
+    print(f"Saving tokenizer from base model...")
+    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
+    tokenizer.save_pretrained(merged_output_path)
 
     print("Done!")
 

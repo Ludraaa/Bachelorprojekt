@@ -177,7 +177,8 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, adapter_p
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
         torch_dtype="auto",
-        local_files_only=True
+        local_files_only=True,
+        device_map=None
     )
 
     from peft import PeftModel
@@ -195,16 +196,16 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, adapter_p
         else:
             print("✅ LoRA adapter successfully attached.")
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model.to("cuda")
+    model.to(device)
 
-    print("Loaded successfully.")
+    print("Model loaded and moved to successfully: ", device)
     print("Loading Tokenizer..")
 
     tokenizer_path = model_path
 
-    if model_path != "../Data/Models/llama7b_wwq_q7":
-        tokenizer_path = "../Data/Models/Llama-2-7b-hf"
+    #tokenizer_path = "../Data/Models/Llama-2-7b-hf"
 
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_path,
@@ -231,11 +232,11 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, adapter_p
     stop_token_id = tokenizer.eos_token_id
 
     def build_prompt(utterance, pid_mapping_list):
-        _input = fill_template('prompts/property-name-gen.input', {
+        _input = fill_template('src/prompts/property-name-gen.input', {
             "query": utterance,
             "qid_list_tuples": pid_mapping_list
         })
-        _instruction = fill_template('prompts/property-name-gen.instruction')
+        _instruction = fill_template('src/prompts/property-name-gen.instruction')
 
         return (
             "Below is an instruction that describes a task, paired with an input that provides further context.\n"

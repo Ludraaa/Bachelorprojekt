@@ -37,8 +37,8 @@ help-adapt-dataset:
 	@echo "      - ~minutes to a few hours depending on dataset size"
 	@echo ""
 	@echo "  (4) Approx RAM & disk:"
-	@echo "      - RAM: ~TODO!!!!!!!!!!!!!1GB depending on dataset size"
-	@echo "      - Disk: usually <1GB of outputs unless huge dataset"
+	@echo "      - RAM: ~3-5GB depending on dataset size"
+	@echo "      - Disk: About the same as the input size for train; test can be larger because it stores wikidata result vectors."
 	@echo ""
 	@echo "  (5) Args:"
 	@echo "      - input_file_path= String - The path to the raw dataset input (jsonl)"
@@ -90,7 +90,7 @@ help-split-dataset:
 	@echo "      - Should be almost instant."
 	@echo ""
 	@echo "  (4) Approx RAM & disk:"
-	@echo "      - RAM: ~TODO!!!!!!!!!!!!!1GB depending on dataset size"
+	@echo "      - RAM: A few hundred MBs"
 	@echo "      - Disk: Exact same as input size, so usually low 100Mbs to few Gbs in extreme cases."
 	@echo ""
 	@echo "  (5) Args:"
@@ -136,7 +136,7 @@ help-eval:
 	@echo "      - Varies greatly depending on Dataset size and model. This could take as little as 15 minutes or as much as 24 hours. Most times it takes about 30-60 minutes. The original WikiSP models take 10x as long as the retrained ones."
 	@echo ""
 	@echo "  (4) Approx RAM & disk:"
-	@echo "      - RAM: ~TODO!!!!!!!!!!!!!1GB depending on dataset size"
+	@echo "      - RAM/VRAM: About 13GB for the base model + a few GB for the inputs. Should run without problems on about 20GB VRAM. "
 	@echo "      - Disk: About as much as the input dataset, if saving is enabled. Otherwise none.."
 	@echo ""
 	@echo "  (5) Args:"
@@ -162,6 +162,19 @@ save_path ?= output/PredictedResults/eval_predictions.json
 comparison_path ?= False
 mongo_port ?= 27016
 
+# -----------------------------------
+ARGS :=
+ARGS += --checkpoint_dir $(checkpoint_dir)
+ARGS += --data_dir $(data_dir)
+ARGS += --eval_mode $(eval_mode)
+ARGS += --get_current_results $(get_current_results)
+ARGS += --save_path $(save_path)
+
+ifneq ($(comparison_path),)
+ARGS += --comparison_path $(comparison_path)
+endif
+
+
 eval:
 	mkdir -p $(dir $(save_path))
 	@echo "Starting MongoDB for eval on port $(mongo_port). The relevant db file lives at /workspace/output/Mongo/mongo_eval_db."
@@ -176,14 +189,7 @@ eval:
 	@echo "  save_path: $(save_path)"
 	@echo "  comparison_path: $(comparison_path)"
 	@echo "  mongo_port: $(mongo_port)"
-	/opt/venv/bin/python src/eval.py \
-	    --checkpoint_dir $(checkpoint_dir) \
-	    --data_dir $(data_dir) \
-	    --eval_mode $(eval_mode) \
-	    --get_current_results $(get_current_results) \
-	    --save_path $(save_path) \
-	    --comparison_path $(comparison_path) \
-	    --mongo_port $(mongo_port)
+	/opt/venv/bin/python src/eval.py $(ARGS)
 	@echo "The mongodb session will persist, so REFINED does not have to rerun. If you want to evaluate on a different dataset next, kill the mongo session using the 'kill-mongo' make target first."
 
 
@@ -207,13 +213,13 @@ help-train:
 	@echo "      - [--callback_output_path] (csv where the training results will be saved)"
 	@echo ""
 	@echo "  (3) Approx time:"
-	@echo "      - ~a few hours to days, depending on parameters. Using a decently sized (~30k) dataset, 5 epochs and dual evaluation 4 times per epoch, it takes around one day."
+	@echo "      - ~On GPU: a few hours to days, depending on parameters. Using a decently sized (~30k) dataset, 5 epochs and dual evaluation 4 times per epoch, it takes around one day. Using CPU takes a really long time."
 	@echo ""
 	@echo "  (4) Approx RAM & disk:"
-	@echo "      - RAM: ~TODO!!!!!!!!!!!!!1GB depending on dataset size"
+	@echo "      - RAM/VRAM: ~13GB for the base model (Llama 7b in this case) + a few more GB for passthrough. Should work fine on ~20GB+ VRAM."
 	@echo "      - Disk: Each combined model (from the checkpoint) takes up about 13GB."
 	@echo "        Training for 5 epochs and saving/evaluating 4 times per epoch needs a total of 20 * 13GB = 260GB for the models alone. The total storage needed seems to be around 300GB when accounting the checkpoints themselves as well."
-	@echo "      - GPU: 1 x 46GB Vram for Training + 1 more for evaluation (optional, but recommended)"
+	@echo "      - GPU: 1 GPU for Training (VRAM usage can be controlled by setting flags) + 1 more GPU for evaluation (optional, but recommended)"
 	@echo ""
 	@echo "  (5) Args:"
 	@echo "      --checkpoint_dir_path: String - Path where the saved checkpoints and model files will go."
@@ -240,7 +246,7 @@ help-train:
 # -----------------------------------
 # train target
 # -----------------------------------
-checkpoint_dir_path ?= /workspace/output/MyWikiSP_WWQ_Q7_LittleAlpaca
+checkpoint_dir_path ?= /workspace/output/MyWikiSP_WWQ_Q7_LittleAlpaca/
 datasets ?= /extern/data/Datasets/WikiWebQuestions/TrainingData/train.json /extern/data/Datasets/Qald7/TrainingData/train.json Alpaca
 scalings ?= 5 20 0.1
 model_name ?= MyWikiSP_WWQ_Q7_LittleAlpaca-
@@ -248,74 +254,97 @@ base_model_path ?= /extern/data/Models/Llama-2-7b-hf
 acc_steps ?= 16
 epochs ?= 5
 eval_steps_per_epoch ?= 2
+
 eval_callback ?= True
+
 callback_output_path ?= /workspace/output/MyWikiSP_WWQ_Q7_LittleAlpaca_TrainingResults.csv
 callback_data_path ?= /extern/data/Datasets/WikiWebQuestions
 callback_eval_mode ?= dev
 callback_comparison_path ?= /extern/data/PredictedResults/local_wikisp_q7_wwq_dev.jsonl
+
 callback_data_path2 ?=
 callback_eval_mode2 ?=
 callback_comparison_path2 ?=
+
 eval_port ?= 27017
 eval_port2 ?= 27018
 
+# -----------------------------------
+ARGS :=
+ARGS += --checkpoint_dir_path $(checkpoint_dir_path)
+ARGS += --datasets $(datasets)
+ARGS += --scalings $(scalings)
+ARGS += --model_name $(model_name)
+ARGS += --base_model_path $(base_model_path)
+ARGS += --acc_steps $(acc_steps)
+ARGS += --epochs $(epochs)
+ARGS += --eval_steps_per_epoch $(eval_steps_per_epoch)
 
+ARGS += --eval_callback $(eval_callback)
+
+ifeq ($(eval_callback),True)
+ARGS += --callback_output_path $(callback_output_path)
+ARGS += --callback_data_path $(callback_data_path)
+ARGS += --callback_eval_mode $(callback_eval_mode)
+ARGS += --callback_comparison_path $(callback_comparison_path)
+ARGS += --eval_port $(eval_port)
+ARGS += --eval_port2 $(eval_port2)
+
+ifneq ($(callback_data_path2),)
+ARGS += --callback_data_path2 $(callback_data_path2)
+endif
+
+ifneq ($(callback_eval_mode2),)
+ARGS += --callback_eval_mode2 $(callback_eval_mode2)
+endif
+
+ifneq ($(callback_comparison_path2),)
+ARGS += --callback_comparison_path2 $(callback_comparison_path2)
+endif
+endif
+
+# -----------------------------------
+# train
+# -----------------------------------
 train:
 	mkdir -p $(dir $(checkpoint_dir_path))
 	mkdir -p $(dir $(callback_output_path))
-	@echo "Starting MongoDB for eval callback on port $(eval_port). The relevant db file lives at /workspace/output/Mongo/eval_callback_1_db."
-	mkdir -p /workspace/output/Mongo/eval_callback_1_db  && 
-	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /workspace/output/Mongo/eval_callback_1_db --bind_ip localhost --port $(eval_port) > /workspace/output/Mongo/eval_callback_1.log 2>&1 &
-	
-	@echo "Starting MongoDB for eval callback on port $(eval_port2). The relevant db file lives at /workspace/output/Mongo/eval_callback_2_db."
-	
-	mkdir -p /workspace/output/Mongo/eval_callback_2_db &&
-	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /workspace/output/Mongo/eval_callback_2_db --bind_ip localhost --port $(eval_port2) > /workspace/output/Mongo/eval_callback_2.log 2>&1 &
-	
+
+ifeq ($(eval_callback),True)
+	@echo "Starting MongoDB for eval callback on port $(eval_port)"
+	mkdir -p /workspace/output/Mongo/eval_callback_1_db
+	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod \
+		--dbpath /workspace/output/Mongo/eval_callback_1_db \
+		--bind_ip localhost \
+		--port $(eval_port) \
+		> /workspace/output/Mongo/eval_callback_1.log 2>&1 &
+
+	@echo "Starting MongoDB for eval callback on port $(eval_port2)"
+	mkdir -p /workspace/output/Mongo/eval_callback_2_db
+	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod \
+		--dbpath /workspace/output/Mongo/eval_callback_2_db \
+		--bind_ip localhost \
+		--port $(eval_port2) \
+		> /workspace/output/Mongo/eval_callback_2.log 2>&1 &
+
 	@sleep 2
-	@echo "Running train.py:"
-	@echo "  checkpoint_dir_path: $(checkpoint_dir_path)"
-	@echo "  datasets: $(datasets)"
-	@echo "  scalings: $(scalings)"
-	@echo "  model_name: $(model_name)"
-	@echo "  base_model_path: $(base_model_path) "
-	@echo "  acc_steps: $(acc_steps) "
-	@echo "  epochs: $(epochs) "
-	@echo "  eval_steps_per_epoch: $(eval_steps_per_epoch) "
-	@echo "  eval_callback: $(eval_callback) "
-	@echo "  callback_output_path: $(callback_output_path) "
-	@echo "  callback_data_path: $(callback_data_path) "
-	@echo "  callback_eval_mode: $(callback_eval_mode) "
-	@echo "  callback_comparison_path: $(callback_comparison_path) "
-	@echo "  callback_data_path2: $(callback_data_path2) "
-	@echo "  callback_eval_mode2: $(callback_eval_mode2) "
-	@echo "  callback_comparison_path2: $(callback_comparison_path2) "
-	@echo "  eval_port: $(eval_port) "
-	@echo "  eval_port2: $(eval_port2) "
-	/opt/venv/bin/python src/train.py \
-	    --checkpoint_dir_path $(checkpoint_dir_path) \
-	    --datasets $(datasets) \
-	    --scalings $(scalings) \
-	    --model_name $(model_name) \
-	    --base_model_path $(base_model_path) \
-	    --acc_steps $(acc_steps) \
-	    --epochs $(epochs) \
-	    --eval_steps_per_epoch $(eval_steps_per_epoch) \
-	    --eval_callback $(eval_callback) \
-	    --callback_output_path $(callback_output_path) \
-	    --callback_data_path $(callback_data_path) \
-	    --callback_eval_mode $(callback_eval_mode) \
-	    --callback_comparison_path $(callback_comparison_path) \
-	    --callback_data_path2 $(callback_data_path2) \
-	    --callback_eval_mode2 $(callback_eval_mode2) \
-	    --callback_comparison_path2 $(callback_comparison_path2) \
-	    --eval_port $(eval_port) \
-	    --eval_port2 $(eval_port2)
-	
-	@echo "Cleaning up DBs.."
+endif
+
+	@echo "Running train.py"
+	/opt/venv_train/bin/python src/train.py $(ARGS)
+
+ifeq ($(eval_callback),True)
+	@echo "Cleaning up DBs"
 	rm -rf /workspace/output/Mongo/eval_callback_1_db
 	rm -rf /workspace/output/Mongo/eval_callback_2_db
+endif
+
 	@echo "All Done! Check the training results in $(callback_output_path) if callback was enabled. The corresponding checkpoints can be found in $(checkpoint_dir_path)."
+
+
+
+
+
 
 # -----------------------------------
 # Detailed help for kill-mongo

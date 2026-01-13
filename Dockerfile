@@ -33,13 +33,14 @@ COPY venv_train_requirements.txt venv_train_requirements.txt
 RUN python3.10 -m venv /opt/venv
 RUN /opt/venv/bin/python -m pip install --no-cache-dir --no-deps -r venv_requirements.txt
 
-RUN python3.10 -m venv /opt/venv_train
-RUN /opt/venv_train/bin/pip install \
-    torch==2.2.1+cu118 \
-    torchvision==0.17.1+cu118 \
-    --index-url https://download.pytorch.org/whl/cu118
-RUN /opt/venv_train/bin/pip install --no-deps torchaudio==2.2.0+cu118 --index-url https://download.pytorch.org/whl/cu118
-RUN /opt/venv_train/bin/python -m pip install --no-cache-dir --no-deps -r venv_train_requirements.txt
+ RUN python3.10 -m venv /opt/venv_train
+# RUN /opt/venv_train/bin/pip install \
+#     torch==2.2.1+cu118 \
+#     torchvision==0.17.1+cu118 \
+#     --index-url https://download.pytorch.org/whl/cu118
+# RUN /opt/venv_train/bin/pip install --no-deps torchaudio==2.2.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+ RUN /opt/venv_train/bin/pip install --no-cache-dir -r venv_train_requirements.txt
+
 
 
 WORKDIR /workspace
