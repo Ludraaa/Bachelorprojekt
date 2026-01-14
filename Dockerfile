@@ -57,12 +57,13 @@ USER root
 
 CMD ["/bin/bash", "--rcfile", "bashrc"]
 
-# docker build -t luis-drayer-project .
+# docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t luis-drayer-project .
 # wharfer build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t luis-drayer-project .
 
 # in general:
 # docker run -it -v $(pwd)/path/to/input:/extern/data:ro --name luis-drayer-project luis-drayer-project
 # wharfer run -it -v $(pwd)/path/to/input:/extern/data:ro --name luis-drayer-project luis-drayer-project
+
 # on tagus:
 # docker run -it -v /local/data-ssd/drayerl/Bachelorprojekt/BigData:/extern/data:ro --name luis-drayer-project luis-drayer-project 
 # wharfer run -it -v /local/data-ssd/drayerl/Bachelorprojekt/BigData:/extern/data:ro --name luis-drayer-project luis-drayer-project 

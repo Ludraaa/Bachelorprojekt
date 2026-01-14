@@ -313,7 +313,7 @@ train:
 ifeq ($(eval_callback),True)
 	@echo "Starting MongoDB for eval callback on port $(eval_port)"
 	mkdir -p /workspace/output/Mongo/eval_callback_1_db
-	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod \
+	nohup /extern/data/Mongo/mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod \
 		--dbpath /workspace/output/Mongo/eval_callback_1_db \
 		--bind_ip localhost \
 		--port $(eval_port) \
@@ -321,7 +321,7 @@ ifeq ($(eval_callback),True)
 
 	@echo "Starting MongoDB for eval callback on port $(eval_port2)"
 	mkdir -p /workspace/output/Mongo/eval_callback_2_db
-	nohup /mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod \
+	nohup /extern/data/Mongo/mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod \
 		--dbpath /workspace/output/Mongo/eval_callback_2_db \
 		--bind_ip localhost \
 		--port $(eval_port2) \

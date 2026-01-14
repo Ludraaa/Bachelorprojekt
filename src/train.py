@@ -1,4 +1,3 @@
-
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 from peft import get_peft_model, LoraConfig, TaskType, AutoPeftModelForCausalLM
@@ -94,10 +93,10 @@ class DualEvalCallback(TrainerCallback):
 
         cmd = [
             EVAL_PYTHON, EVAL_SCRIPT,
-            "--checkpoint_path", model,
-            "--data_path", data_path,
+            "--checkpoint_dir", model,
+            "--data_dir", data_path,
             "--eval_mode", eval_mode,
-            "--dataset_is_wwq", str(is_wwq),
+            "--get_current_results", str(is_wwq),
             "--mongo_port", str(mongo_port)
         ]
 
@@ -139,7 +138,7 @@ class DualEvalCallback(TrainerCallback):
 
     def on_save(self, args, state, control, **kwargs):
 
-        ckpt_path = get_latest_checkpoint(checkpoint_dir)
+        ckpt_path = get_latest_checkpoint(self.checkpoint_dir)
             
         VENV_PATH = "/opt/venv/bin/python"
         SCRIPT_PATH = "/workspace/src/merge.py"
@@ -163,7 +162,7 @@ class DualEvalCallback(TrainerCallback):
         print("Merging complete.")
 
         ckpt = ckpt_path.split('-')[-1]
-        merged_path = os.path.join(checkpoint_dir, f"{self.model_name}{ckpt}")
+        merged_path = os.path.join(self.checkpoint_dir, f"{self.model_name}{ckpt}")
         
         print(f"Evaluating using model: {merged_path}")
 
@@ -562,9 +561,9 @@ def main():
 
     if args.eval_callback:
         eval_callback = DualEvalCallback(
-            checkpoint_dir = checkpoint_dir,
-            base_model_path = model_path,
-            model_name = model_name,
+            checkpoint_dir = args.checkpoint_dir_path,
+            base_model_path = args.base_model_path,
+            model_name = args.model_name,
             output_path = args.callback_output_path,
 
             data_path_1 = args.callback_data_path,
