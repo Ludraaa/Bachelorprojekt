@@ -154,25 +154,27 @@ help-eval:
 # -----------------------------------
 # eval target
 # -----------------------------------
-checkpoint_dir      ?= /extern/data/Models/MyModels/MyWSP_WWQ_Q7_EqualAlpaca
+checkpoint_dir      ?= /extern/data/Models/MyModels/MyWSP_WWQ_Q7_EqualAlpaca/
 data_dir  ?= /extern/data/Datasets/Qald7/
 eval_mode ?= test
 get_current_results ?= True
 save_path ?= output/PredictedResults/eval_predictions.json
-comparison_path ?= False
+comparison_path ?=
 mongo_port ?= 27016
 
 # -----------------------------------
-ARGS :=
-ARGS += --checkpoint_dir $(checkpoint_dir)
-ARGS += --data_dir $(data_dir)
-ARGS += --eval_mode $(eval_mode)
-ARGS += --get_current_results $(get_current_results)
-ARGS += --save_path $(save_path)
+EVAL_ARGS :=
+EVAL_ARGS += --checkpoint_dir $(checkpoint_dir)
+EVAL_ARGS += --data_dir $(data_dir)
+EVAL_ARGS += --eval_mode $(eval_mode)
+EVAL_ARGS += --get_current_results $(get_current_results)
+EVAL_ARGS += --save_path $(save_path)
 
 ifneq ($(comparison_path),)
-ARGS += --comparison_path $(comparison_path)
+EVAL_ARGS += --comparison_path $(comparison_path)
 endif
+
+EVAL_ARGS += --mongo_port $(mongo_port)
 
 
 eval:
@@ -189,7 +191,7 @@ eval:
 	@echo "  save_path: $(save_path)"
 	@echo "  comparison_path: $(comparison_path)"
 	@echo "  mongo_port: $(mongo_port)"
-	/opt/venv/bin/python src/eval.py $(ARGS)
+	/opt/venv/bin/python src/eval.py $(EVAL_ARGS)
 	@echo "The mongodb session will persist, so REFINED does not have to rerun. If you want to evaluate on a different dataset next, kill the mongo session using the 'kill-mongo' make target first."
 
 
@@ -246,10 +248,10 @@ help-train:
 # -----------------------------------
 # train target
 # -----------------------------------
-checkpoint_dir_path ?= /workspace/output/MyWikiSP_WWQ_Q7_LittleAlpaca/
+checkpoint_dir_path ?= /workspace/output/MyWikiSP_WWQ_Q7_EqualAlpaca/
 datasets ?= /extern/data/Datasets/WikiWebQuestions/TrainingData/train.json /extern/data/Datasets/Qald7/TrainingData/train.json Alpaca
-scalings ?= 5 20 0.1
-model_name ?= MyWikiSP_WWQ_Q7_LittleAlpaca-
+scalings ?= 5 20 0.2
+model_name ?= MyWikiSP_WWQ_Q7_EqualAlpaca-
 base_model_path ?= /extern/data/Models/Llama-2-7b-hf
 acc_steps ?= 16
 epochs ?= 5
@@ -258,9 +260,9 @@ eval_steps_per_epoch ?= 2
 eval_callback ?= True
 
 callback_output_path ?= /workspace/output/MyWikiSP_WWQ_Q7_LittleAlpaca_TrainingResults.csv
-callback_data_path ?= /extern/data/Datasets/WikiWebQuestions
+callback_data_path ?= /extern/data/Datasets/WikiWebQuestions/
 callback_eval_mode ?= dev
-callback_comparison_path ?= /extern/data/PredictedResults/local_wikisp_q7_wwq_dev.jsonl
+callback_comparison_path ?=
 
 callback_data_path2 ?=
 callback_eval_mode2 ?=
@@ -286,7 +288,11 @@ ifeq ($(eval_callback),True)
 ARGS += --callback_output_path $(callback_output_path)
 ARGS += --callback_data_path $(callback_data_path)
 ARGS += --callback_eval_mode $(callback_eval_mode)
+
+ifneq ($(callback_comparison_path),)
 ARGS += --callback_comparison_path $(callback_comparison_path)
+endif
+
 ARGS += --eval_port $(eval_port)
 ARGS += --eval_port2 $(eval_port2)
 

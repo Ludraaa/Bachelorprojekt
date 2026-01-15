@@ -917,7 +917,7 @@ def main():
         client["wikidata-eval"]["test"].insert_many(json.load(open(data_path + "test.json")))
     else:
         print("########################################################")
-        print("Reusing already inserted dataset. If you want to evaluate on a new dataset, kill the mongodb first (using Makefule)!!")
+        print("Reusing already inserted dataset. If you want to evaluate on a new dataset, kill the mongodb first (use 'make kill-mongo')")
         print("########################################################")
 
     if client["wikidata-eval"]["dev"].find_one() == None:    
