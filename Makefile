@@ -1,5 +1,24 @@
 .PHONY: help help-adapt-dataset adapt-dataset help-split-dataset split-dataset help-eval eval help-train train help-kill-mongo kill-mongo
 
+# Mandatory Global Vars
+
+REFINED_PATH ?=
+MONGODB_PATH ?=
+
+ifndef REFINED_PATH
+$(error REFINED_PATH is not set. Check SETUP.md or export it in your shell.)
+endif
+
+ifndef MONGODB_PATH
+$(error MONGODB_PATH is not set. Check SETUP.md or export it in your shell.)
+endif
+
+# Overrideable Global Vars
+
+VENV_PATH ?= /opt/venv
+VENV_TRAIN_PATH ?= /opt/venv_train
+OUTPUT ?= /workspace/output/
+
 # -----------------------------------
 # Default help target (first)
 # -----------------------------------
@@ -52,22 +71,22 @@ help-adapt-dataset:
 # Dataset adaptation target
 # -----------------------------------
 input_file_path      ?= /extern/data/Datasets/Qald7/original_files/train.jsonl
-jsonl_output_path	?= /workspace/output/adapted_Qald7_train.jsonl
-json_output_path   ?= /workspace/output/adapted_Qald7_train.json
+jsonl_output_path	?= adapted_Qald7_train.jsonl
+json_output_path   ?= adapted_Qald7_train.json
 adapt_mode       ?= train
 
 adapt-dataset:
-	mkdir -p $(dir $(jsonl_output_path))
-	mkdir -p $(dir $(json_output_path))
+	mkdir -p $(dir $(OUTPUT)$(jsonl_output_path))
+	mkdir -p $(dir $(OUTPUT)$(json_output_path))
 	@echo "Running dataset adaptation:"
 	@echo "  input_file_path:  $(input_file_path)"
-	@echo "  jsonl_output_path:  $(jsonl_output_path)"
-	@echo "  json_output_path:  $(json_output_path)"
+	@echo "  jsonl_output_path:  $(OUTPUT)$(jsonl_output_path)"
+	@echo "  json_output_path:  $(OUTPUT)$(json_output_path)"
 	@echo "  adapt_mode:  $(adapt_mode)"
 	/opt/venv/bin/python3.10 src/adapt_dataset.py \
 	    --input_file_path $(input_file_path) \
-	    --jsonl_output_path $(jsonl_output_path) \
-	    --json_output_path $(json_output_path) \
+	    --jsonl_output_path $(OUTPUT)$(jsonl_output_path) \
+	    --json_output_path $(OUTPUT)$(json_output_path) \
 	    --adapt_mode $(adapt_mode)
 
 
@@ -103,18 +122,18 @@ help-split-dataset:
 # Dataset adaptation target
 # -----------------------------------
 # input_file_path reused from adapt_dataset
-output_dir  ?= /workspace/output/split_dataset/
+output_dir  ?= split_dataset/
 test_ratio ?= 0.5
 
 split-dataset:
-	mkdir -p $(dir $(output_dir))
+	mkdir -p $(dir $(OUTPUT)$(output_dir))
 	@echo "Running dataset split:"
 	@echo "  input:  $(input_file_path)"
-	@echo "  output directory:  $(output_dir)"
+	@echo "  output directory:  $(OUTPUT)$(output_dir)"
 	@echo "  test ratio:  $(test_ratio)"
 	/opt/venv/bin/python src/split_dataset.py \
 	    --input_file_path $(input_file_path) \
-	    --output_dir $(output_dir) \
+	    --output_dir $(OUTPUT)$(output_dir) \
 	    --test_ratio $(test_ratio)
 
 # -----------------------------------
@@ -158,7 +177,7 @@ checkpoint_dir      ?= /extern/data/Models/MyModels/MyWSP_WWQ_Q7_EqualAlpaca/
 data_dir  ?= /extern/data/Datasets/Qald7/
 eval_mode ?= test
 get_current_results ?= True
-save_path ?= output/PredictedResults/eval_predictions.json
+save_path ?= PredictedResults/eval_predictions.json
 comparison_path ?=
 mongo_port ?= 27016
 
@@ -168,7 +187,7 @@ EVAL_ARGS += --checkpoint_dir $(checkpoint_dir)
 EVAL_ARGS += --data_dir $(data_dir)
 EVAL_ARGS += --eval_mode $(eval_mode)
 EVAL_ARGS += --get_current_results $(get_current_results)
-EVAL_ARGS += --save_path $(save_path)
+EVAL_ARGS += --save_path $(OUTPUT)$(save_path)
 
 ifneq ($(comparison_path),)
 EVAL_ARGS += --comparison_path $(comparison_path)
@@ -178,17 +197,17 @@ EVAL_ARGS += --mongo_port $(mongo_port)
 
 
 eval:
-	mkdir -p $(dir $(save_path))
+	mkdir -p $(dir $(OUTPUT)$(save_path))
 	@echo "Starting MongoDB for eval on port $(mongo_port). The relevant db file lives at /workspace/output/Mongo/mongo_eval_db."
 	mkdir -p /workspace/output/Mongo/mongo_eval_db
-	nohup /extern/data/Mongo/mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod --dbpath /workspace/output/Mongo/mongo_eval_db --bind_ip localhost --port $(mongo_port) > /workspace/output/Mongo/mongo_eval.log 2>&1 &
+	nohup $(MONGODB_PATH) --dbpath /workspace/output/Mongo/mongo_eval_db --bind_ip localhost --port $(mongo_port) > /workspace/output/Mongo/mongo_eval.log 2>&1 &
 	@sleep 2
 	@echo "Running eval:"
 	@echo "  checkpoint_dir:  $(checkpoint_dir)"
 	@echo "  data_dir: $(data_dir)"
 	@echo "  eval_mode: $(eval_mode)"
 	@echo "  get_current_results: $(get_current_results)"
-	@echo "  save_path: $(save_path)"
+	@echo "  save_path: $(OUTPUT)$(save_path)"
 	@echo "  comparison_path: $(comparison_path)"
 	@echo "  mongo_port: $(mongo_port)"
 	/opt/venv/bin/python src/eval.py $(EVAL_ARGS)
@@ -248,7 +267,7 @@ help-train:
 # -----------------------------------
 # train target
 # -----------------------------------
-checkpoint_dir_path ?= /workspace/output/MyWikiSP_WWQ_Q7_EqualAlpaca/
+checkpoint_dir_path ?= TrainingCheckpoints/MyWikiSP_WWQ_Q7_EqualAlpaca/
 datasets ?= /extern/data/Datasets/WikiWebQuestions/TrainingData/train.json /extern/data/Datasets/Qald7/TrainingData/train.json Alpaca
 scalings ?= 5 20 0.2
 model_name ?= MyWikiSP_WWQ_Q7_EqualAlpaca-
@@ -259,7 +278,7 @@ eval_steps_per_epoch ?= 2
 
 eval_callback ?= True
 
-callback_output_path ?= /workspace/output/MyWikiSP_WWQ_Q7_LittleAlpaca_TrainingResults.csv
+callback_output_path ?= TrainingResults/MyWikiSP_WWQ_Q7_LittleAlpaca_TrainingResults.csv
 callback_data_path ?= /extern/data/Datasets/WikiWebQuestions/
 callback_eval_mode ?= dev
 callback_comparison_path ?=
@@ -273,7 +292,7 @@ eval_port2 ?= 27018
 
 # -----------------------------------
 ARGS :=
-ARGS += --checkpoint_dir_path $(checkpoint_dir_path)
+ARGS += --checkpoint_dir_path $(OUTPUT)$(checkpoint_dir_path)
 ARGS += --datasets $(datasets)
 ARGS += --scalings $(scalings)
 ARGS += --model_name $(model_name)
@@ -285,7 +304,7 @@ ARGS += --eval_steps_per_epoch $(eval_steps_per_epoch)
 ARGS += --eval_callback $(eval_callback)
 
 ifeq ($(eval_callback),True)
-ARGS += --callback_output_path $(callback_output_path)
+ARGS += --callback_output_path $(OUTPUT)$(callback_output_path)
 ARGS += --callback_data_path $(callback_data_path)
 ARGS += --callback_eval_mode $(callback_eval_mode)
 
@@ -313,13 +332,13 @@ endif
 # train
 # -----------------------------------
 train:
-	mkdir -p $(dir $(checkpoint_dir_path))
-	mkdir -p $(dir $(callback_output_path))
+	mkdir -p $(dir $(OUTPUT)$(checkpoint_dir_path))
+	mkdir -p $(dir $(OUTPUT)$(callback_output_path))
 
 ifeq ($(eval_callback),True)
 	@echo "Starting MongoDB for eval callback on port $(eval_port)"
 	mkdir -p /workspace/output/Mongo/eval_callback_1_db
-	nohup /extern/data/Mongo/mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod \
+	nohup $(MONGODB_PATH) \
 		--dbpath /workspace/output/Mongo/eval_callback_1_db \
 		--bind_ip localhost \
 		--port $(eval_port) \
@@ -327,7 +346,7 @@ ifeq ($(eval_callback),True)
 
 	@echo "Starting MongoDB for eval callback on port $(eval_port2)"
 	mkdir -p /workspace/output/Mongo/eval_callback_2_db
-	nohup /extern/data/Mongo/mongodb-linux-x86_64-ubuntu2204-7.0.5/bin/mongod \
+	nohup $(MONGODB_PATH) \
 		--dbpath /workspace/output/Mongo/eval_callback_2_db \
 		--bind_ip localhost \
 		--port $(eval_port2) \

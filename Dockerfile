@@ -49,6 +49,7 @@ RUN mkdir -p /workspace/output /workspace/.hf-cache /workspace/.torch-cache && c
 
 COPY Makefile Makefile
 COPY bashrc bashrc
+COPY SETUP.md SETUP.md
 
 # copy code
 COPY src/ /workspace/src

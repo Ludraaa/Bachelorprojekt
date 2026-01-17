@@ -4,4 +4,5 @@ export HF_HOME=/workspace/.hf-cache
 export TORCHINDUCTOR_CACHE_DIR=/workspace/.torch-cache
 echo
 echo "Welcome to this Docker container, type \"make help\" to get some help"
+echo "If this is your first time, make sure to \"cat SETUP.md\" as well."
 echo
