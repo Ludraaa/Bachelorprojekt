@@ -15,8 +15,8 @@ endif
 
 # Overrideable Global Vars
 
-VENV_PATH ?= /opt/venv
-VENV_TRAIN_PATH ?= /opt/venv_train
+VENV_PATH ?= /opt/venv/
+VENV_TRAIN_PATH ?= /opt/venv_train/
 OUTPUT ?= /workspace/output/
 
 # -----------------------------------
@@ -83,7 +83,7 @@ adapt-dataset:
 	@echo "  jsonl_output_path:  $(OUTPUT)$(jsonl_output_path)"
 	@echo "  json_output_path:  $(OUTPUT)$(json_output_path)"
 	@echo "  adapt_mode:  $(adapt_mode)"
-	/opt/venv/bin/python3.10 src/adapt_dataset.py \
+	$(VENV_PATH)bin/python3.10 src/adapt_dataset.py \
 	    --input_file_path $(input_file_path) \
 	    --jsonl_output_path $(OUTPUT)$(jsonl_output_path) \
 	    --json_output_path $(OUTPUT)$(json_output_path) \
@@ -131,7 +131,7 @@ split-dataset:
 	@echo "  input:  $(input_file_path)"
 	@echo "  output directory:  $(OUTPUT)$(output_dir)"
 	@echo "  test ratio:  $(test_ratio)"
-	/opt/venv/bin/python src/split_dataset.py \
+	$(VENV_PATH)bin/python src/split_dataset.py \
 	    --input_file_path $(input_file_path) \
 	    --output_dir $(OUTPUT)$(output_dir) \
 	    --test_ratio $(test_ratio)
@@ -210,7 +210,7 @@ eval:
 	@echo "  save_path: $(OUTPUT)$(save_path)"
 	@echo "  comparison_path: $(comparison_path)"
 	@echo "  mongo_port: $(mongo_port)"
-	/opt/venv/bin/python src/eval.py $(EVAL_ARGS)
+	$(VENV_PATH)bin/python src/eval.py $(EVAL_ARGS)
 	@echo "The mongodb session will persist, so REFINED does not have to rerun. If you want to evaluate on a different dataset next, kill the mongo session using the 'kill-mongo' make target first."
 
 
@@ -356,7 +356,7 @@ ifeq ($(eval_callback),True)
 endif
 
 	@echo "Running train.py"
-	/opt/venv_train/bin/python src/train.py $(ARGS)
+	$(VENV_TRAIN_PATH)bin/python src/train.py $(ARGS)
 
 ifeq ($(eval_callback),True)
 	@echo "Cleaning up DBs"
