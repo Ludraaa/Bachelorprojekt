@@ -26,14 +26,17 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 
-COPY venv_requirements.txt venv_requirements.txt
+COPY venv_eval_requirements.txt venv_eval_requirements.txt
 COPY venv_train_requirements.txt venv_train_requirements.txt
+COPY venv_refined_requirements.txt venv_refined_requirements.txt
+COPY env.sh /workspace/env.sh
 
+RUN python3.10 -m venv /opt/venv_eval
+RUN /opt/venv_eval/bin/python -m pip install --upgrade pip setuptools wheel
+RUN /opt/venv_eval/bin/python -m pip install --no-cache-dir --no-deps -r venv_eval_requirements.txt
 
-RUN python3.10 -m venv /opt/venv
-RUN /opt/venv/bin/python -m pip install --no-cache-dir --no-deps -r venv_requirements.txt
-
- RUN python3.10 -m venv /opt/venv_train
+RUN python3.10 -m venv /opt/venv_train
+RUN /opt/venv_train/bin/python -m pip install --upgrade pip setuptools wheel
 # RUN /opt/venv_train/bin/pip install \
 #     torch==2.2.1+cu118 \
 #     torchvision==0.17.1+cu118 \
@@ -41,6 +44,9 @@ RUN /opt/venv/bin/python -m pip install --no-cache-dir --no-deps -r venv_require
 # RUN /opt/venv_train/bin/pip install --no-deps torchaudio==2.2.0+cu118 --index-url https://download.pytorch.org/whl/cu118
  RUN /opt/venv_train/bin/pip install --no-cache-dir -r venv_train_requirements.txt
 
+RUN python3.10 -m venv /opt/venv_refined
+RUN /opt/venv_refined/bin/python -m pip install --upgrade pip setuptools wheel
+RUN /opt/venv_refined/bin/python -m pip install --no-cache-dir -r venv_refined_requirements.txt
 
 
 WORKDIR /workspace

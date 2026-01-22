@@ -14,7 +14,7 @@ import re
 from urllib.parse import urlencode
 #from location_silei import location_search --not found anywhere, ask on github
 from mention_heuristics import location_search
-
+import subprocess
 
 #edit
 import os
@@ -110,33 +110,49 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def do_ned_for_dev(target_db, mode, qid_name_mapping):
+def do_ned_for_dev(mongo_port, mode):
+    print("Running refined in subprocess")
+
+    env = os.environ.copy()
+    
+    venv_refined_path = os.environ.get("VENV_REFINED_PATH", "/opt/venv_refined/") + "bin/python"
+    script_path = "src/run_refined.py"
+
+    cmd = [
+        venv_refined_path,
+        script_path,
+        "--mongo_port", str(mongo_port),
+        "--mode", str(mode)
+    ]
+
+    subprocess.run(cmd, check=True, env=env)
+
+
+def do_ned_for_dev_old(target_db, mode, qid_name_mapping):
     if mode == "refined":
         from refined.inference.processor import Refined
         #Changed from model_name="/data0/wikidata-workdir/models/refined"
         refined = Refined.from_pretrained(
-                                    model_name="/extern/data/Models/refined",
+                                    model_name=os.environ.get("REFINED_PATH", "/extern/data/Models/refined"),
                                     entity_set="wikidata",
-                                    data_dir="/extern/data/Models/refined",
+                                    data_dir=os.environ.get("REFINED_PATH", "/extern/data/Models/refined"),
                                     download_files=True,
                                     use_precomputed_descriptions=True
                                     )
 
         def refined_ned(utterance):
-            #print("NED Input:\n", utterance)
             spans = refined.process_text(utterance)
-            #print("NED Immediate Output:\n", spans)
             output = set()
             for span in spans:
                 if span.predicted_entity.wikidata_entity_id:
                     qid = span.predicted_entity.wikidata_entity_id
-             #       print("QID:\n", qid)
                     wikidata_name = get_name_from_qid("wd:" + qid, qid_name_mapping)
-              #      print("Wikidata name:\n", wikidata_name)
                     if wikidata_name is not None:
                         output.add((wikidata_name, qid))
-            #print("NED Output:\n", output)
-            return output    
+            return output   
+
+
+
         
         dev_set = list(target_db.find())
         for i in tqdm(dev_set):
@@ -171,7 +187,7 @@ def do_ned_for_dev(target_db, mode, qid_name_mapping):
 
 
 #reimplementation of evaluate_dev using batching, because it took 10 seconds per query
-def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, adapter_path=False, batch_size=1):
+def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_size=1):
     dev_set = list(target_db.find())
     print("Loading Model..")
     model = AutoModelForCausalLM.from_pretrained(
@@ -180,21 +196,6 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, adapter_p
         local_files_only=True,
         device_map=None
     )
-
-    from peft import PeftModel
-
-    if adapter_path:
-        model = PeftModel.from_pretrained(model, adapter_path)
-        print("Loaded model with adapter (LORA)")
-        print(model.peft_config)
-        print(model.active_adapter)
-        # --- Verification: check if LoRA layers exist ---
-        lora_layers = [n for n, _ in model.named_parameters() if "lora" in n.lower()]
-        print(f"Found {len(lora_layers)} LoRA layers.")
-        if len(lora_layers) == 0:
-            print("⚠️ WARNING: No LoRA layers detected. Adapter may not have loaded correctly!")
-        else:
-            print("✅ LoRA adapter successfully attached.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -259,7 +260,7 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, adapter_p
             prompt = build_prompt(utterance, pid_mapping_list)
             prompts.append(prompt)
         
-        #print(prompts[0])
+        print(prompts[0])
 
         # Tokenize with explicit max_length to prevent silent truncation of SELECT/SPARQL
         inputs = tokenizer(
@@ -309,25 +310,7 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, adapter_p
                 decoded = tokenizer.decode([token_id], skip_special_tokens=False)
                 print(f"{i:03d} | Token ID: {token_id:<6} | Decoded: {repr(decoded)}")
 
-        decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=False)
-        
-        #print("Decoded Outputs: ", decoded_outputs, flush=True)
-
-        ''' 
-        # Postprocess and store
-        for j, output_text in enumerate(decoded_outputs):
-            if '</s>' in output_text:
-                output_text = output_text.split('</s>')[0]
-            final_output = output_text.strip().split("### Response:")[-1].strip()
-
-            item = batch[j]
-            existing_predictions = item.get("predictions", [])
-            prediction = {
-                "mode": mode,
-                "model_path": model_path,
-                "sparql": final_output,
-            }'''
-        
+        decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         for j, output_text in enumerate(decoded_outputs):
             #print("iterating through decoded outputs")
@@ -335,8 +318,10 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, adapter_p
             #print("Raw Output-------------------------------")
             #print(output_text, flush=True)
             #print("----------------------------------------")
-            if '</s>' in output_text:
-                output_text = output_text.split('</s>')[0]
+#            if '</s>' in output_text:
+#                output_text = output_text.split('</s>')[0]
+#            if '<|endoftext|>' in output_text:
+#                output_text = output_text.split('<|endoftext|>')[0]
 
             final_output = output_text.split('### Response:')[-1]
             final_output = final_output.strip()
@@ -930,7 +915,8 @@ def main():
 
     #get pid mapping
     print("Doing NED:")
-    do_ned_for_dev(target_database, "refined", qid_name_mapping)
+   # do_ned_for_dev(target_database, "refined", qid_name_mapping)
+    do_ned_for_dev(mongo_port, args.eval_mode)
 
     #Get predictions
     print("Getting predictions:")

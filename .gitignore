@@ -3,3 +3,10 @@
 .nvimlog
 *.log
 *.tmp
+output
+path
+venv_train
+venv_refined
+venv_eval
+__pycache__/
+hub/

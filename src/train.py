@@ -7,9 +7,6 @@ import subprocess
 import sys
 import json
 
-#force training to use gpu 0
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"   # training uses GPU 0
-
 #gets the latest checkpoint in the specified directory
 def get_latest_checkpoint(dir):
     latest = None
@@ -51,7 +48,9 @@ class DualEvalCallback(TrainerCallback):
 
         # Shared settings
         mongo_port1=27017,
-        mongo_port2=27018
+        mongo_port2=27018,
+
+        eval_gpu
     ):
         self.checkpoint_dir = checkpoint_dir
         self.base_model_path = base_model_path
@@ -82,14 +81,16 @@ class DualEvalCallback(TrainerCallback):
         self.ret0 = None
         self.ret1 = None
 
+        self.gpu = eval_gpu
+
     def _run_eval(self, model ,data_path, eval_mode,
                   save_path, comparison_path, is_wwq, mongo_port, process_index):
 
         #path to eval venv (training uses a different venv)
-        EVAL_PYTHON = "/opt/venv/bin/python"
-        
+        EVAL_PYTHON = os.environ.get("VENV_EVAL_PATH", "/opt/venv_eval/") + "bin/python"
+
         #path to the eval script
-        EVAL_SCRIPT = "/workspace/src/eval.py"
+        EVAL_SCRIPT = "src/eval.py"
 
         cmd = [
             EVAL_PYTHON, EVAL_SCRIPT,
@@ -107,9 +108,9 @@ class DualEvalCallback(TrainerCallback):
         
         # === ONLY CHANGE GPU FOR THIS SUBPROCESS ===
         env = os.environ.copy()
-        env["CUDA_VISIBLE_DEVICES"] = "1"   # use GPU 1 for eval
+        env["CUDA_VISIBLE_DEVICES"] = str(self.gpu)
 
-        print(f"[EvalCallback] Running eval: {data_path}")
+        print(f"[EvalCallback] Running eval: {data_path}", flush=True)
         try:
             result = subprocess.run(cmd, check=True, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
@@ -119,7 +120,7 @@ class DualEvalCallback(TrainerCallback):
             print("Return code:", e.returncode)
             print("STDOUT:\n", e.stdout)
             print("STDERR:\n", e.stderr)
-            raise  # optional: re-raise so training still stops
+            raise
 
         # The last line is your JSON
         last_line = result.stdout.strip().splitlines()[-1]
@@ -140,8 +141,8 @@ class DualEvalCallback(TrainerCallback):
 
         ckpt_path = get_latest_checkpoint(self.checkpoint_dir)
             
-        VENV_PATH = "/opt/venv/bin/python"
-        SCRIPT_PATH = "/workspace/src/merge.py"
+        VENV_PATH = os.environ.get("VENV_TRAIN_PATH", "/opt/venv_train/") + "bin/python"
+        SCRIPT_PATH = "src/merge.py"
 
         merge_cmd = [
             VENV_PATH,
@@ -151,20 +152,28 @@ class DualEvalCallback(TrainerCallback):
             "--model_name", self.model_name                    # also store this in __init__
         ]
         
-        print(f"Merging into model using: {ckpt_path}")
+        print(f"Merging into model using: {ckpt_path}", flush=True)
 
          # === ONLY CHANGE GPU FOR THIS SUBPROCESS ===
         env = os.environ.copy()
-        env["CUDA_VISIBLE_DEVICES"] = "1"   # use GPU 1 for eval
+        env["CUDA_VISIBLE_DEVICES"] = str(self.gpu)
+        
+        try:
+            subprocess.run(merge_cmd, check=True, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        except subprocess.CalledProcessError as e:
+            print("===Merge subprocess failed===")
+            print("Command:", e.cmd)
+            print("Return code:", e.returncode)
+            print("STDOUT:\n", e.stdout)
+            print("STDERR:\n", e.stderr)
+            raise
 
-        subprocess.run(merge_cmd, check=True, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-        print("Merging complete.")
+        print("Merging complete.", flush=True)
 
         ckpt = ckpt_path.split('-')[-1]
         merged_path = os.path.join(self.checkpoint_dir, f"{self.model_name}{ckpt}")
         
-        print(f"Evaluating using model: {merged_path}")
+        print(f"Evaluating using model: {merged_path}", flush=True)
 
         # Run eval #1
         self._run_eval(
@@ -205,10 +214,21 @@ class DualEvalCallback(TrainerCallback):
         
         model_name = os.path.basename(merged_path)
         dataset_name_1 = os.path.basename(self.data_path_1.rstrip("/"))
-        dataset_name_2 = os.path.basename(self.data_path_2.rstrip("/"))
+        dataset_name_2 = ""
+
+        if self.data_path_2:
+            dataset_name_2 = os.path.basename(self.data_path_2.rstrip("/"))
+        else:
+            dataset_name_2 = "None"
         
+
         def pct(x):
-            return f"{float(x) * 100:.1f}"
+            if x:
+                return f"{float(x) * 100:.1f}"
+            elif x == -1:
+                return "None"
+            else:
+                return "None"
 
         with open(csv_path, "a") as f:
             if write_header:
@@ -355,6 +375,17 @@ def main():
         help="port to be used for the second eval mongodb."
     )
     
+    parser.add_argument(
+        "--train_gpu",
+        type=int,
+        default="0",
+    )
+    parser.add_argument(
+        "--eval_gpu",
+        type=int,
+        default="1",
+    )
+
     args = parser.parse_args()
     
     if len(args.datasets) != len(args.scalings):
@@ -375,6 +406,10 @@ def main():
                 "Missing required arguments when --eval_callback is set: "
                 + ", ".join(missing)
             )
+
+    #force training to use specified gpu
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.train_gpu)
+
 
     checkpoint_dir = args.checkpoint_dir_path
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -512,8 +547,9 @@ def main():
     raw_model = AutoModelForCausalLM.from_pretrained(
         model_path,
         device_map=None,
+        trust_remote_code=True,
         torch_dtype="auto",  # automatically use float16 if supported    
-        local_files_only=True
+        #local_files_only=True
     )
 
     print("Loaded raw model..", flush=True)
@@ -521,8 +557,8 @@ def main():
 
     # Define LoRA configuration
     lora_config = LoraConfig(
-        r=128,                 # rank of LoRA matrices
-        lora_alpha=256,        # scaling factor
+        r=32,                 # rank of LoRA matrices
+        lora_alpha=64,        # scaling factor
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj","gate_proj", "up_proj", "down_proj"], # this is experimental
         lora_dropout=0.05,
         bias="none",
@@ -575,7 +611,8 @@ def main():
             comparison_path_2 = args.callback_comparison_path2,
 
             mongo_port1 = args.eval_port,
-            mongo_port2 = args.eval_port2
+            mongo_port2 = args.eval_port2,
+            eval_gpu = args.eval_gpu
         )
 
 

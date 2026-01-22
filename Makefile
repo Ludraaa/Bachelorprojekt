@@ -15,8 +15,9 @@ endif
 
 # Overrideable Global Vars
 
-VENV_PATH ?= /opt/venv/
+VENV_EVAL_PATH ?= /opt/venv_eval/
 VENV_TRAIN_PATH ?= /opt/venv_train/
+VENV_REFINED_PATH ?= /opt/venv_refined/
 OUTPUT ?= /workspace/output/
 
 # -----------------------------------
@@ -83,7 +84,7 @@ adapt-dataset:
 	@echo "  jsonl_output_path:  $(OUTPUT)$(jsonl_output_path)"
 	@echo "  json_output_path:  $(OUTPUT)$(json_output_path)"
 	@echo "  adapt_mode:  $(adapt_mode)"
-	$(VENV_PATH)bin/python3.10 src/adapt_dataset.py \
+	$(VENV_REFINED_PATH)bin/python3.10 src/adapt_dataset.py \
 	    --input_file_path $(input_file_path) \
 	    --jsonl_output_path $(OUTPUT)$(jsonl_output_path) \
 	    --json_output_path $(OUTPUT)$(json_output_path) \
@@ -131,7 +132,7 @@ split-dataset:
 	@echo "  input:  $(input_file_path)"
 	@echo "  output directory:  $(OUTPUT)$(output_dir)"
 	@echo "  test ratio:  $(test_ratio)"
-	$(VENV_PATH)bin/python src/split_dataset.py \
+	$(VENV_EVAL_PATH)bin/python src/split_dataset.py \
 	    --input_file_path $(input_file_path) \
 	    --output_dir $(OUTPUT)$(output_dir) \
 	    --test_ratio $(test_ratio)
@@ -198,9 +199,9 @@ EVAL_ARGS += --mongo_port $(mongo_port)
 
 eval:
 	mkdir -p $(dir $(OUTPUT)$(save_path))
-	@echo "Starting MongoDB for eval on port $(mongo_port). The relevant db file lives at /workspace/output/Mongo/mongo_eval_db."
-	mkdir -p /workspace/output/Mongo/mongo_eval_db
-	nohup $(MONGODB_PATH) --dbpath /workspace/output/Mongo/mongo_eval_db --bind_ip localhost --port $(mongo_port) > /workspace/output/Mongo/mongo_eval.log 2>&1 &
+	@echo "Starting MongoDB for eval on port $(mongo_port). The relevant db file lives at $(OUTPUT)Mongo/mongo_eval_db."
+	mkdir -p $(OUTPUT)Mongo/mongo_eval_db
+	nohup $(MONGODB_PATH) --dbpath $(OUTPUT)Mongo/mongo_eval_db --bind_ip localhost --port $(mongo_port) > $(OUTPUT)Mongo/mongo_eval.log 2>&1 &
 	@sleep 2
 	@echo "Running eval:"
 	@echo "  checkpoint_dir:  $(checkpoint_dir)"
@@ -210,7 +211,7 @@ eval:
 	@echo "  save_path: $(OUTPUT)$(save_path)"
 	@echo "  comparison_path: $(comparison_path)"
 	@echo "  mongo_port: $(mongo_port)"
-	$(VENV_PATH)bin/python src/eval.py $(EVAL_ARGS)
+	$(VENV_EVAL_PATH)bin/python src/eval.py $(EVAL_ARGS)
 	@echo "The mongodb session will persist, so REFINED does not have to rerun. If you want to evaluate on a different dataset next, kill the mongo session using the 'kill-mongo' make target first."
 
 
@@ -261,6 +262,8 @@ help-train:
 	@echo "      --callback_comparison_path2: String - Path to the first predicted results fine to be used for comparison. This is optional. "
 	@echo "      --eval_port: int - Port for the first eval session's mongodb to run on. "
 	@echo "      --eval_port_2: int - Port for the second eval session's mongodb to run on. "
+	@echo "      --train_gpu: int - What GPU to use for training. Defaults to 0, falls back to CPU if not found. "
+	@echo "      --eval_gpu: int - What GPU to use for the evaluation callback. Defaults to 1, falls back to CPU if not found. "
 	@echo ""
 
 
@@ -289,6 +292,9 @@ callback_comparison_path2 ?=
 
 eval_port ?= 27017
 eval_port2 ?= 27018
+
+train_gpu ?= 0
+eval_gpu ?= 1
 
 # -----------------------------------
 ARGS :=
@@ -328,6 +334,9 @@ ARGS += --callback_comparison_path2 $(callback_comparison_path2)
 endif
 endif
 
+ARGS += --train_gpu $(train_gpu)
+ARGS += --eval_gpu $(eval_gpu)
+
 # -----------------------------------
 # train
 # -----------------------------------
@@ -337,20 +346,20 @@ train:
 
 ifeq ($(eval_callback),True)
 	@echo "Starting MongoDB for eval callback on port $(eval_port)"
-	mkdir -p /workspace/output/Mongo/eval_callback_1_db
+	mkdir -p $(OUTPUT)Mongo/eval_callback_1_db
 	nohup $(MONGODB_PATH) \
-		--dbpath /workspace/output/Mongo/eval_callback_1_db \
+		--dbpath $(OUTPUT)Mongo/eval_callback_1_db \
 		--bind_ip localhost \
 		--port $(eval_port) \
-		> /workspace/output/Mongo/eval_callback_1.log 2>&1 &
+		> $(OUTPUT)Mongo/eval_callback_1.log 2>&1 &
 
 	@echo "Starting MongoDB for eval callback on port $(eval_port2)"
-	mkdir -p /workspace/output/Mongo/eval_callback_2_db
+	mkdir -p $(OUTPUT)Mongo/eval_callback_2_db
 	nohup $(MONGODB_PATH) \
-		--dbpath /workspace/output/Mongo/eval_callback_2_db \
+		--dbpath $(OUTPUT)Mongo/eval_callback_2_db \
 		--bind_ip localhost \
 		--port $(eval_port2) \
-		> /workspace/output/Mongo/eval_callback_2.log 2>&1 &
+		> $(OUTPUT)Mongo/eval_callback_2.log 2>&1 &
 
 	@sleep 2
 endif
@@ -360,8 +369,8 @@ endif
 
 ifeq ($(eval_callback),True)
 	@echo "Cleaning up DBs"
-	rm -rf /workspace/output/Mongo/eval_callback_1_db
-	rm -rf /workspace/output/Mongo/eval_callback_2_db
+	rm -rf $(OUTPUT)Mongo/eval_callback_1_db
+	rm -rf $(OUTPUT)Mongo/eval_callback_2_db
 endif
 
 	@echo "All Done! Check the training results in $(callback_output_path) if callback was enabled. The corresponding checkpoints can be found in $(checkpoint_dir_path)."
@@ -399,7 +408,7 @@ help-kill-mongo:
 # kill-mongo target
 # -----------------------------------
 
-db_dir_path ?= /workspace/output/Mongo/mongo_eval_db
+db_dir_path ?= $(OUTPUT)Mongo/mongo_eval_db
 
 kill-mongo:
 	@echo "Running kill-mongo:"

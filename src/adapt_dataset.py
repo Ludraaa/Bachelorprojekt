@@ -6,8 +6,10 @@ import time
 import sys
 import random
 import argparse
+import os
+from refined.inference.processor import Refined
 
-def main():
+def main(refined):
     parser = argparse.ArgumentParser(description="Adapts a given Dataset to the format WikiSP expects. If the Dataset has weird field names, the code might have to be adjusted slightly.\n The general workflow:\nIf you have a single dataset to convert, run this script with the 'train' mode. Split the resulting converted dataset into train, dev, and val sets using 'split_dataset.py'. The train set will be ready after this. After this, run this script on the dev and test sets again using 'test' mode, to get the finished test.jsonl and dev.jsonl.")
 
     parser.add_argument(
@@ -252,9 +254,9 @@ def main():
             #If question doesnt end with '?', add it.
             if q[-1] != '?':
                 q += '?'
-
+            
             #run refined on question, get corresponding label
-            qid_set = refined_ned(q)
+            qid_set = refined_ned(refined, q, None)
             qid_list = list(qid_set)
             label_list = []
             for qid in qid_list:
@@ -312,4 +314,12 @@ def main():
     print("done ->", OUTPUT_PATH)
 
 if __name__ == "__main__":
-    main()
+    refined = Refined.from_pretrained(
+                                        model_name=os.environ.get("REFINED_PATH", "/extern/data/Models/refined"),
+                                        entity_set="wikidata",
+                                        data_dir=os.environ.get("REFINED_PATH", "/extern/data/Models/refined"),
+                                        download_files=True,
+                                        use_precomputed_descriptions=True
+                                        )
+
+    main(refined)
