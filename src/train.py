@@ -34,6 +34,7 @@ class DualEvalCallback(TrainerCallback):
         base_model_path,
         model_name,
         output_path,
+        eval_gpu,
         # First evaluation config
         data_path_1,
         eval_mode_1,
@@ -48,14 +49,14 @@ class DualEvalCallback(TrainerCallback):
 
         # Shared settings
         mongo_port1=27017,
-        mongo_port2=27018,
+        mongo_port2=27018
 
-        eval_gpu
     ):
         self.checkpoint_dir = checkpoint_dir
         self.base_model_path = base_model_path
         self.model_name = model_name
         self.output_path = output_path
+        self.gpu = eval_gpu
 
         # Eval 1
         self.data_path_1 = data_path_1
@@ -81,7 +82,6 @@ class DualEvalCallback(TrainerCallback):
         self.ret0 = None
         self.ret1 = None
 
-        self.gpu = eval_gpu
 
     def _run_eval(self, model ,data_path, eval_mode,
                   save_path, comparison_path, is_wwq, mongo_port, process_index):
