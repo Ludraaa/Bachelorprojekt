@@ -2,6 +2,9 @@
 
 ## A detailed explanation on what this project accomplishes can be found in the corresponding [blog-post](https://ad-blog.cs.uni-freiburg.de/post/reproducing-wikisp/).
 
+### **Original WikiSP Project**
+- [Original WikiSP Repository](https://github.com/stanford-oval/wikidata-emnlp23)
+
 ## Usage
 
 In order to make use of my work yourself, first clone the repository:
