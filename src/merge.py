@@ -47,14 +47,11 @@ def main():
     print("Merging LoRA adapter into the base model...")
     merged_model = model_with_lora.merge_and_unload()
     
-    # lora_checkpoint_path = "./models/MyModels/MyWikiSP/my_wikisp_alpaca/checkpoint-1755"
-    # model_name = "MyWikiSP"
-
     #parent of checkpoint folder (one level up)
-    checkpoint_parent = os.path.dirname(lora_checkpoint_path)  # .../my_wikisp_alpaca
+    checkpoint_parent = os.path.dirname(lora_checkpoint_path)
 
     #base name of checkpoint folder
-    checkpoint_basename = os.path.basename(lora_checkpoint_path)  # "checkpoint-1755"
+    checkpoint_basename = os.path.basename(lora_checkpoint_path)
 
     #extract digits at the end
     match = re.search(r'\d+$', checkpoint_basename)
@@ -68,7 +65,6 @@ def main():
 
     #Make sure folder exists
     os.makedirs(merged_output_path, exist_ok=True)
-
 
 
     print(f"Saving merged model to {merged_output_path}...")

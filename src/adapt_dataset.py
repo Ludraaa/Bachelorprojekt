@@ -86,10 +86,10 @@ def main(refined):
                 if r.status_code in (500, 400):
                     print(f"Caught {r.status_code} Server Error:", err)
                     return []
-                elif r.status_code == 429:  # Too many requests
+                elif r.status_code == 429:
                     print(f"Rate limited, backing off for {delay}s...")
                     time.sleep(delay + random.uniform(0, 1))  # jitter
-                    delay *= 2  # exponential backoff
+                    delay *= 2
                     continue
                 else:
                     raise  # re-raise unexpected HTTP errors
@@ -104,19 +104,15 @@ def main(refined):
                 delay *= 2
                 continue
 
-        # If all retries failed
         return []
 
     def strip_prefixes(sparql):
-        # find positions, -1 means "not found"
         j = sparql.find("SELECT")
         k = sparql.find("ASK")
         l = sparql.find("CONSTRUCT")
 
-        # filter out -1
         positions = [pos for pos in (j, k, l) if pos != -1]
         if not positions:
-            # no recognized query type, return as-is
             return sparql.strip()
 
         i = min(positions)
@@ -125,13 +121,12 @@ def main(refined):
 
 
     def find_ids(s):
-        # Capture P and Q ids prefixed by wdt:, wd:, just P/Q if present
         pids = set(re.findall(r'wdt:P(\d+)', s))
         qids = set(re.findall(r'wd:Q(\d+)', s))
-        # also search for full <http://www.wikidata.org/entity/P123> forms (rare)
+
         pids |= set(re.findall(r'entity\/(P\d+)', s))
         qids |= set(re.findall(r'entity\/(Q\d+)', s))
-        # normalize to form like 'P19', 'Q12439'
+
         pids = {"P"+p for p in pids if not p.startswith("P")}
         pids = {p if p.startswith("P") else "P"+p for p in pids}
         qids = {"Q"+q for q in qids if not q.startswith("Q")}
@@ -140,7 +135,6 @@ def main(refined):
 
 
     def fetch_labels(ids):
-        # ids is list like ["P19","Q123", ...] - wbgetentities accepts comma-separated
         if not ids:
             return {}
         ids_param = "|".join(ids)
@@ -161,14 +155,12 @@ def main(refined):
         for k,v in data.items():
             lab = v.get("labels", {}).get("en", {}).get("value")
             if lab:
-                # normalize to lowercase + underscores, remove problematic chars
                 normalized = re.sub(r'[^0-9a-z_]', '', lab.lower().replace(" ", "_"))
                 labels[k] = normalized
         return labels
 
 
     def replace_ids_with_labels(sparql, labels_map):
-        # Replace wdt:Pxxx and wd:Qxxx occurrences with names if available.
         def repl_wdt(m):
             pid = "P"+m.group(1)
             name = labels_map.get(pid)
@@ -234,20 +226,14 @@ def main(refined):
             rec = json.loads(line)
             q = rec.get("question") or rec.get("input") or ""
             sparql_raw = rec.get("sparql","")
-            #print("Raw Sparql: ", sparql_raw)
             sparql_no_prefix = strip_prefixes(sparql_raw)
-            #print("No Prefix: ", sparql_no_prefix)
 
-            # keep 'sparql' field as machine canonical (with PIDs/QIDs)
-            # ensure it uses short wd:/wdt: notation (we already stripped PREFIX)
             canonical_sparql = sparql_no_prefix
 
-            # find ids and fetch labels
             pids, qids = find_ids(canonical_sparql)
             ids_to_fetch = pids + qids
             labels = fetch_labels(ids_to_fetch) if ids_to_fetch else {}
 
-            # build human-friendly output (replace P/Q -> labels when possible)
             human_sparql = replace_ids_with_labels(canonical_sparql, labels)
             
         
@@ -267,7 +253,6 @@ def main(refined):
             #Insert entities from refined into the query
             for i in range(len(qid_list)):
                 input_field += f"{label_list[i]} with QID {qid_list[i]};"
-                #Replace the entities in the question with Qids for given entities:
                 human_sparql = human_sparql.replace(str(label_list[i]).lower().replace(" ", "_"), str(qid_list[i]))
             
             if MODE == "train":
@@ -297,7 +282,7 @@ def main(refined):
             json_bytes = json.dumps(out, ensure_ascii=False).encode("utf-8")
                 
             if len(json_bytes) > MAX_DOC_SIZE:
-                print(f"\n⚠️ Skipping oversized sample ({len(json_bytes)/1024/1024:.2f} MB): {rec.get('id', 'unknown')}")
+                print(f"\n Skipping oversized sample ({len(json_bytes)/1024/1024:.2f} MB): {rec.get('id', 'unknown')}")
                 if "utterance" in out:
                     print("Utterance:", out["utterance"])
                 elif "input" in out:

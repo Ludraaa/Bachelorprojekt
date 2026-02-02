@@ -7,7 +7,6 @@ from utils import safe_request_json
 
 def get_name_from_qid(qid, qid_name_mapping):
     candidate = qid_name_mapping.find_one({"qid" : qid})
-    # print(candidate)
     if candidate:
         return candidate["name"]
     
@@ -23,22 +22,7 @@ def get_name_from_qid(qid, qid_name_mapping):
         print("processing QID {}".format(qid))
         
         r = safe_request_json(url, params = {'format': 'json', 'query': query}, headers={"User-Agent":"Wikidata VA Analysis, Stanford OVAL"})
-        #print("QID Lookup:\n", r)
-        
-
-        #name = r["results"]["bindings"][0]["label"]["value"]
-        #
-        #print("Found {} with name {}".format(qid, name))
-        #qid_name_mapping.insert_one({
-        #        "qid": qid,
-        #        "name": name
-        #    }
-        #)
-
-        #return name
-
-
-        # -------- robust extraction --------
+       
         try:
             bindings = r.get("results", {}).get("bindings", [])
             if not bindings:
@@ -47,7 +31,6 @@ def get_name_from_qid(qid, qid_name_mapping):
             name = bindings[0]["label"]["value"]
         except Exception:
             return None
-        # ----------------------------------
 
         print(f"Found {qid} with name {name}")
 

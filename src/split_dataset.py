@@ -1,7 +1,6 @@
 import os
 import argparse
 
-###SPLITTING DATASET
 from datasets import load_dataset
 
 def main():
@@ -51,7 +50,6 @@ def main():
 
     # Only split + save if they don’t already exist
     if not all(os.path.exists(p) for p in [dev_path, test_path]):
-        # Save as JSONL
         dev_set.to_json(dev_path, lines=True)
         test_set.to_json(test_path, lines=True)
         

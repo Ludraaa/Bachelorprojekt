@@ -28,7 +28,7 @@ ret1 = None
 def run_eval(model ,data_path, eval_mode,
                   save_path, comparison_path, is_wwq, mongo_port):
 
-    #path to eval venv (training uses a different venv)
+    #path to eval venv
     EVAL_PYTHON = "/work/dlclarge2/drayerl-Bachelorprojekt_WS/venv/bin/python"
 
     #path to the eval script
@@ -60,9 +60,9 @@ def run_eval(model ,data_path, eval_mode,
         print("Return code:", e.returncode)
         print("STDOUT:\n", e.stdout)
         print("STDERR:\n", e.stderr)
-        raise  # optional: re-raise so training still stops
+        raise
 
-    # The last line is your JSON
+    # get last line of subprocess stdout
     last_line = result.stdout.strip().splitlines()[-1]
 
     try:
@@ -88,7 +88,6 @@ checkpoints.sort(key=lambda x: x[0])
 print("Checkpoints to check:\n")
 print(checkpoints)
 
-# Iterate in order
 for step, path in checkpoints:
     print(f"Processing checkpoint {step} at {path}")
     VENV_PATH = "/work/dlclarge2/drayerl-Bachelorprojekt_WS/venv/bin/python"
@@ -143,7 +142,7 @@ for step, path in checkpoints:
     # TSV file path
     csv_path = output_path
 
-    # Ensure header exists
+    # Ensure table header exists
     write_header = not os.path.exists(csv_path)
 
     tmp_model_name = os.path.basename(merged_path)

@@ -12,19 +12,13 @@ import time
 import multiprocessing
 import re
 from urllib.parse import urlencode
-#from location_silei import location_search --not found anywhere, ask on github
 from mention_heuristics import location_search
 import subprocess
-
-#edit
 import os
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 import torch
 
 def execute_sparql(query, sparql_results):
-    #if sparql_results.find_one({"sparql": query}):
-    #    return sparql_results.find_one({"sparql": query})["results"]
-    
     url = 'https://query.wikidata.org/sparql'
 
     r = safe_request_json(url, params = {'format': 'json', 'query': query}, headers={"User-Agent":"Wikidata VA Analysis, Stanford OVAL"}) 
@@ -51,7 +45,6 @@ def execute_sparql(query, sparql_results):
 
 def get_name_from_qid(qid, qid_name_mapping):
     candidate = qid_name_mapping.find_one({"qid" : qid})
-    # print(candidate)
     if candidate:
         return candidate["name"]
     
@@ -67,22 +60,6 @@ def get_name_from_qid(qid, qid_name_mapping):
         print("processing QID {}".format(qid))
         
         r = safe_request_json(url, params = {'format': 'json', 'query': query}, headers={"User-Agent":"Wikidata VA Analysis, Stanford OVAL"})
-        #print("QID Lookup:\n", r)
-        
-
-        #name = r["results"]["bindings"][0]["label"]["value"]
-        #
-        #print("Found {} with name {}".format(qid, name))
-        #qid_name_mapping.insert_one({
-        #        "qid": qid,
-        #        "name": name
-        #    }
-        #)
-
-        #return name
-
-
-        # -------- robust extraction --------
         try:
             bindings = r.get("results", {}).get("bindings", [])
             if not bindings:
@@ -91,7 +68,6 @@ def get_name_from_qid(qid, qid_name_mapping):
             name = bindings[0]["label"]["value"]
         except Exception:
             return None
-        # ----------------------------------
 
         print(f"Found {qid} with name {name}")
 
@@ -128,65 +104,6 @@ def do_ned_for_dev(mongo_port, mode):
     subprocess.run(cmd, check=True, env=env)
 
 
-def do_ned_for_dev_old(target_db, mode, qid_name_mapping):
-    if mode == "refined":
-        from refined.inference.processor import Refined
-        #Changed from model_name="/data0/wikidata-workdir/models/refined"
-        refined = Refined.from_pretrained(
-                                    model_name=os.environ.get("REFINED_PATH", "/extern/data/Models/refined"),
-                                    entity_set="wikidata",
-                                    data_dir=os.environ.get("REFINED_PATH", "/extern/data/Models/refined"),
-                                    download_files=True,
-                                    use_precomputed_descriptions=True
-                                    )
-
-        def refined_ned(utterance):
-            spans = refined.process_text(utterance)
-            output = set()
-            for span in spans:
-                if span.predicted_entity.wikidata_entity_id:
-                    qid = span.predicted_entity.wikidata_entity_id
-                    wikidata_name = get_name_from_qid("wd:" + qid, qid_name_mapping)
-                    if wikidata_name is not None:
-                        output.add((wikidata_name, qid))
-            return output   
-
-
-
-        
-        dev_set = list(target_db.find())
-        for i in tqdm(dev_set):
-            if "refined_ned_results" in i and i["refined_ned_results"]:
-                continue  # skip already processed
-
-            utterance = i["utterance"]
-            pid_mapping_list = list(refined_ned(utterance))
-            target_db.update_one({
-                "_id": i["_id"]
-            }, {
-                "$set": {
-                    "refined_ned_results": pid_mapping_list
-                }
-            })
-    elif mode == "oracle":
-        dev_set = list(target_db.find())
-        pattern = r"wd:Q\d+"
-        for i in tqdm(dev_set):
-            utterance = i["utterance"]
-            qid_list = re.findall(pattern, i["clean_sparql"])
-            qid_list_tuples = [(get_name_from_qid(i), i.split(":")[1]) for i in qid_list]
-            target_db.update_one({
-                "_id": i["_id"]
-            }, {
-                "$set": {
-                    "oracle_ned_results": qid_list_tuples
-                }
-            })
-    else:
-        raise ValueError
-
-
-#reimplementation of evaluate_dev using batching, because it took 10 seconds per query
 def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_size=1):
     dev_set = list(target_db.find())
     print("Loading Model..")
@@ -206,7 +123,6 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_siz
 
     tokenizer_path = model_path
 
-    #tokenizer_path = "../Data/Models/Llama-2-7b-hf"
 
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_path,
@@ -216,11 +132,7 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_siz
     print("Loaded successfully.")
     model.eval()
     
-    #print("Model vocab size:", model.config.vocab_size)
-    #print("Tokenizer vocab size:", len(tokenizer))
-
     if len(tokenizer) != model.config.vocab_size:
-        print("⚠️ Mismatch detected! Resizing embeddings.")
         model.resize_token_embeddings(len(tokenizer))
 
     
@@ -245,7 +157,7 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_siz
             f"### Instruction:\n{_instruction}\n\n### Input:\n{_input}\n\n### Response:"
         )
 
-    # Filter out examples that already have predictions (optional)
+    # Filter out examples that already have predictions
     dev_set = [i for i in dev_set if "predictions" not in i or not any(p["model_path"] == model_path for p in i["predictions"])]
     print("Amount to be generated: ", len(dev_set))
 
@@ -262,28 +174,15 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_siz
         
         print(prompts[0])
 
-        # Tokenize with explicit max_length to prevent silent truncation of SELECT/SPARQL
         inputs = tokenizer(
             prompts,
             return_tensors="pt",
             padding=True,
             truncation=True,
-            max_length=model.config.max_position_embeddings - 200,  # usually 1024 or 2048
+            max_length=model.config.max_position_embeddings - 200,
             add_special_tokens=True
         )
         
-        if False:
-            # Assuming inputs is from tokenizer(...)
-            first_input_ids = inputs["input_ids"][0]  # first prompt in the batch
-            first_labels = inputs.get("labels", first_input_ids)  # default to input_ids if labels missing
-
-            for i, (token_id, label_id) in enumerate(zip(first_input_ids, first_labels)):
-                decoded = tokenizer.decode(token_id, skip_special_tokens=False)
-                print(f"{i}th token:")
-                print(f"Token: {token_id}")
-                print(f"Decoded: {decoded}")
-                print(f"Label: {label_id}\n")
-
         # Move to device
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
@@ -297,32 +196,12 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_siz
                 do_sample=False,
                 top_p=1,
                 pad_token_id=tokenizer.pad_token_id,
-                eos_token_id=stop_token_id,  # <- stop at EOS
+                eos_token_id=stop_token_id,
             )
         
-
-        if False:
-            # Get the generated sequence (take first sample if batch size = 1)
-            generated_ids = outputs[0].tolist()
-        
-            # Print each token ID and its decoded representation
-            for i, token_id in enumerate(generated_ids):
-                decoded = tokenizer.decode([token_id], skip_special_tokens=False)
-                print(f"{i:03d} | Token ID: {token_id:<6} | Decoded: {repr(decoded)}")
-
         decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         for j, output_text in enumerate(decoded_outputs):
-            #print("iterating through decoded outputs")
-            # Truncate if needed
-            #print("Raw Output-------------------------------")
-            #print(output_text, flush=True)
-            #print("----------------------------------------")
-#            if '</s>' in output_text:
-#                output_text = output_text.split('</s>')[0]
-#            if '<|endoftext|>' in output_text:
-#                output_text = output_text.split('<|endoftext|>')[0]
-
             final_output = output_text.split('### Response:')[-1]
             final_output = final_output.strip()
 
@@ -348,20 +227,10 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_siz
 
 
 def execute_predicted_sparql(sparql, name_to_pid_mapping, sparql_results, qid_name_mapping):
-    # first, let's replace the properties
-    
-    # if ("wdt:instance_of/wdt:subclass_of" in sparql):
-    #     print("HELPPPP\n\n\n\n\n")
-    
-    # print(sparql)
     sparql = sparql.replace("wdt:instance_of/wdt:subclass_of", "wdt:P31/wdt:P279")
-    # print(sparql)
-    
     
     url = 'https://query.wikidata.org/sparql'
     extracted_property_names =  [x[1] for x in re.findall(r'(wdt:|p:|ps:|pq:)([a-zA-Z_\(\)(\/_)]+)(?![1-9])', sparql)]
-    #print("Extracted Property Names for: " + '\n' + sparql)
-    #print(extracted_property_names)
     pid_replacements = {}
     for replaced_property_name in extracted_property_names:
         if not name_to_pid_mapping.find_one({"name" : replaced_property_name}):
@@ -374,21 +243,11 @@ def execute_predicted_sparql(sparql, name_to_pid_mapping, sparql_results, qid_na
                 SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
             }"""% i
             
-            #time.sleep(1)
-            #response = requests.get(url, params={'format': 'json', 'query': pid_query})
-            #response.raise_for_status()
-            #data = response.json()
-            #print("Request 1---------------------")
             data = safe_request_json(url, params={'format': 'json', 'query': pid_query}, headers={"User-Agent": "Wikidata VA Analysis, Stanford OVAL"})
-            #print("PID Query:\n", pid_query)
-            #print("Json from request:\n", data)
-            #print("Request End-------------------")
             if 'results' in data and 'bindings' in data['results'] and len(data['results']['bindings']) > 0:
-                # Extract the property ID from the response
                 property_id = data['results']['bindings'][0]['property']['value']
                 property_id = property_id.replace('http://www.wikidata.org/entity/', '')
                 
-                #print("found by sparql querying wikidata.. this is good")
 
                 print("inserting {} for {}".format(replaced_property_name, property_id))
                 name_to_pid_mapping.insert_one({
@@ -406,21 +265,9 @@ def execute_predicted_sparql(sparql, name_to_pid_mapping, sparql_results, qid_na
                     "format": "json",
                     "type": "property"
                 }
-                #encoded_url = url + "?" + urlencode(params)
-                # print(encoded_url)
-                #time.sleep(1)
-                #response = requests.get(encoded_url)
-                #data = response.json()
-                #print("Request 2-----------------")
-                data = safe_request_json(url, params, headers={"User-Agent": "Wikidata VA Analysis, Stanford OVAL"})
-                #print("Query:\n", params)
-                #print("Json from request:\n", data)
-                #print("Request End---------------")
-                
+               
                 if "search" in data and len(data["search"]) > 0:
                     property_id = data["search"][0]["id"]
-
-                    #print("found by fallback 1 (api)")
 
                     print("inserting {} for {} by querying aliases for property".format(replaced_property_name, property_id))
                     name_to_pid_mapping.insert_one({
@@ -446,9 +293,6 @@ def execute_predicted_sparql(sparql, name_to_pid_mapping, sparql_results, qid_na
     # next, we need to replace the domain entities
     extracted_entity_names =  [x[1] for x in re.findall(r'(wd:)([a-zA-PR-Z_0-9-]+)', sparql)]
     
-    #print("Extracted Entity names for: " + sparql)
-
-    #print(extracted_entity_names)
     qid_replacements = {}
     for extracted_entity_name in extracted_entity_names:
         if extracted_entity_name in ["anaheim_ca"]:
@@ -460,25 +304,18 @@ def execute_predicted_sparql(sparql, name_to_pid_mapping, sparql_results, qid_na
         for i in qid_name_mapping.find():
             if i["name"] == extracted_entity_name and "qid" in i:
                 
-                #print("Found in QID mapping")
-
                 found = True
                 qid_replacements[extracted_entity_name] = i["qid"]
             elif i["name"].lower().replace(' ', '_').replace('/','_').replace('-', '_') == extracted_entity_name and "qid" in i:
                 found = True
-
-                #print("Found in QID mapping after normalizing")
 
                 qid_replacements[extracted_entity_name] = i["qid"]
         
         
         
         if not found:
-            #print("not found in QID mapping : do location search")
             try_location = location_search(extracted_entity_name.replace("_", " "))
             if try_location is not None:
-
-                #print("Found by location search: " + try_location)
 
                 try_location = "wd:" + try_location
                 print("inserting {} for {}".format(try_location, extracted_entity_name))
@@ -488,31 +325,6 @@ def execute_predicted_sparql(sparql, name_to_pid_mapping, sparql_results, qid_na
                 })
                 qid_replacements[extracted_entity_name] = try_location
             else:
-            
-            # trying querying https://www.wikidata.org/w/api.php?action=wbsearchentities&search=governor%20of%20oregon&language=en&limit=20&format=json
-            # url = "https://www.wikidata.org/w/api.php"
-            # params = {
-            #     "action": "wbsearchentities",
-            #     "search": extracted_entity_name.replace("_", " "),
-            #     "language": "en",
-            #     "limit": 20,
-            #     "format": "json"
-            # }
-            # encoded_url = url + "?" + urlencode(params)
-            # response = requests.get(encoded_url)
-            # data = response.json()
-            # time.sleep(1)
-            
-            # if "search" in data and len(data["search"]) > 0:
-            #     found_entity_id = "wd:" + data["search"][0]["id"]
-            #     qid_replacements[extracted_entity_name] = found_entity_id
-            #     print("inserting {} for {}".format(found_entity_id, extracted_entity_name))
-            #     qid_name_mapping.insert_one({
-            #         "name": extracted_entity_name,
-            #         "qid": found_entity_id
-            #     })
-            # else:
-                
                 print("CANNOT FIND ENTITY: {} for SPARQL {}".format(extracted_entity_name, sparql))
                 return [], sparql
     
@@ -524,11 +336,9 @@ def execute_predicted_sparql(sparql, name_to_pid_mapping, sparql_results, qid_na
         
     # finally, we can execute
     prediction_results = execute_sparql(sparql, sparql_results)
-    # time.sleep(1)
     return prediction_results, sparql
         
 def compare_results(res1, res2):
-    # each is a list of results
     if type(res1) is bool or type(res2) is bool:
         return res1 == res2
 
@@ -538,7 +348,6 @@ def compare_results(res1, res2):
     if (res1 == res2):
         return True
     else:
-        # print(res1, res2)
         return False
 
 def safe_divide(x, y):
@@ -552,7 +361,6 @@ def normalize(res):
 
     out = []
     for item in res:
-        # Skip empty dicts or None
         if not item or not isinstance(item, dict):
             continue
         if isinstance(item, dict):
@@ -572,8 +380,6 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
     def print_results(i, prediction, final_sparql):
         print(i["utterance"], flush=True)
         print(bcolors.WARNING + final_sparql + bcolors.ENDC, flush=True)
-        #again, clean sparql
-        #print(bcolors.OKBLUE + i["clean_sparql"] + bcolors.ENDC)
         if save_path:
             entry = {
                 "dev_set_id": i["id"],
@@ -601,11 +407,9 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
     for i in target_db.find():
         
         key = i["id"]
-        #print(i)
         print(i["utterance"])
 
         if i["results"] == []:
-             #print(i["utterance"])
              print("skipped")
              continue
             
@@ -623,8 +427,6 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
         
         
         if found_prediction is not None and (not overwrite_existing or total < 800):
-            #EDIT what is clean sparql
-            #if found_prediction["final_sparql"] == i["clean_sparql"] or compare_results(found_prediction["results"], i["results"]):
             if compare_results(found_prediction["results"], i["results"]):
                 print("Results identical!")
                 exact_match += 1
@@ -644,7 +446,6 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
                 if prediction["model_path"] == model_path:
                     
                     prediction_results, final_sparql = execute_predicted_sparql(prediction["sparql"], name_to_pid_mapping, sparql_results, qid_name_mapping)
-                    #final_sparql = final_sparql.strip()
 
                     print("Getting Predictions:")    
                     print("Predicted:\n" + final_sparql, flush=True)
@@ -677,15 +478,10 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
 
                     #as the KB has changed, get results on their sparql first to compare  august 2025 results
                     if (wwq):
-                        #print("Getting 2025 result of gold sparql..")
                         res_2025 = execute_sparql(i["sparql"], sparql_results)
                         
-                        #if we evaluate on wwq, use 2025 results, as the saved results are old
                         to_be_compared = res_2025
 
-                        #print("Predicted Sparql: ")
-                        #print(final_sparql)
-                        
                     if comparison_path:
 
                         #Get the prediction on the set, to see if the predictions are exactly the same
@@ -710,9 +506,6 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
                         else:
                             total_non_empty += 1
                     
-                    #print("Pred Res:\n", normalize(prediction_results))
-                    #print("Gold Res:\n", normalize(to_be_compared))
-
                     if final_sparql == gold_sparql or compare_results(prediction_results, to_be_compared):    
                         print("Match", flush=True)
                         exact_match += 1
@@ -768,7 +561,7 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
             total_F1_score += 1 if gold_res == prediction_res else 0
         else:
             
-            #both gold and predicted results are emtpy -> 100% overlap between predictions!!
+            #both gold and predicted results are emtpy -> 100% overlap between predictions
             if len(gold) == 0 and len(pred) == 0:
                 total_F1_score += 1
                 continue
@@ -791,7 +584,6 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
             print("local comparison acc: {}/{} = {}".format(local_wikisp_match, total_non_empty, local_wikisp_match/total_non_empty))
         print()
 
-    #write our predictions to file
     if save_path:
         import json
         with open(save_path, "w", encoding="utf-8") as fd:
@@ -840,8 +632,8 @@ def main():
     parser.add_argument(
         "--eval_mode",
         type=str,
-        choices=["dev", "test"],  # restrict to these two values
-        default="dev",             # optional default
+        choices=["dev", "test"],
+        default="dev",
         help="Evaluation mode: 'dev' or 'test'",
         required=True
     )
@@ -887,7 +679,6 @@ def main():
     except Exception as e:
         print("MongoDB not running: ", e)
     
-    # Helper function to load JSONL
     def load_jsonl(file_path):
         data = []
         with open(file_path, "r", encoding="utf-8") as f:
@@ -913,17 +704,13 @@ def main():
         print("Inserting " + comparison_path)
         client["mywikisp_sparql"]["original_sparql"].insert_many(json.load(open(comparison_path)))
 
-    #get pid mapping
     print("Doing NED:")
-   # do_ned_for_dev(target_database, "refined", qid_name_mapping)
     do_ned_for_dev(mongo_port, args.eval_mode)
 
-    #Get predictions
     print("Getting predictions:")
     evaluate_dev_batch(model_path, model_path,  target_database, "refined", batch_size = 1)
     
     print("Executing Predictions to get stats:")
-    #Compare Predictions to get statistics etc.
     ret1, ret2, ret3 = execute_predictions(model_path, target_database, wwq, name_to_pid_mapping, sparql_results, qid_name_mapping, my_sparql_results,  overwrite_existing=True, save_path=save_path, comparison_path=comparison_path) 
 
     print("#############################DONE#############################")
@@ -934,24 +721,11 @@ def main():
         "local_acc": ret3
     }
 
-    print(json.dumps(result))  # parent script can parse this
+    print(json.dumps(result))
 
 
     return result
 
-    # ==========================================================================================================
-    # if you are evaluating a new model, then you should do thd following:
-    
-    # 1st: start the model server to listen to evaluation requests
-    # start_server(model_path)
-    # atexit.register(stop_server)
-    
-    # 2nd: get predictions for your target dataset with required NED data (mode is either "refined" or "oracle")
-    # this will run through the target dataset set and record predictions from model
-    # evaluate_dev(SERVER_PORT, model_path, model_path, qald_test, "refined")
-    
-    # 3rd, finally, get and execution results from the model and compare with existing results, compute statistics
-    # execute_predictions(model_path, qald_test, overwrite_existing=True)
 
 if __name__ == "__main__":
     main()

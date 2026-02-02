@@ -47,7 +47,6 @@ class DualEvalCallback(TrainerCallback):
         save_path_2=None,
         comparison_path_2=None,
 
-        # Shared settings
         mongo_port1=27017,
         mongo_port2=27018
 
@@ -86,7 +85,7 @@ class DualEvalCallback(TrainerCallback):
     def _run_eval(self, model ,data_path, eval_mode,
                   save_path, comparison_path, is_wwq, mongo_port, process_index):
 
-        #path to eval venv (training uses a different venv)
+        #path to eval venv
         EVAL_PYTHON = os.environ.get("VENV_EVAL_PATH", "/opt/venv_eval/") + "bin/python"
 
         #path to the eval script
@@ -106,7 +105,6 @@ class DualEvalCallback(TrainerCallback):
         if comparison_path:
             cmd += ["--comparison_path", comparison_path]
         
-        # === ONLY CHANGE GPU FOR THIS SUBPROCESS ===
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(self.gpu)
 
@@ -122,7 +120,6 @@ class DualEvalCallback(TrainerCallback):
             print("STDERR:\n", e.stderr)
             raise
 
-        # The last line is your JSON
         last_line = result.stdout.strip().splitlines()[-1]
         
         try:
@@ -147,14 +144,13 @@ class DualEvalCallback(TrainerCallback):
         merge_cmd = [
             VENV_PATH,
             SCRIPT_PATH,
-            "--base_model_path", self.base_model_path,         # you MUST store this in your callback init
+            "--base_model_path", self.base_model_path,
             "--lora_checkpoint_path", ckpt_path,
-            "--model_name", self.model_name                    # also store this in __init__
+            "--model_name", self.model_name
         ]
         
         print(f"Merging into model using: {ckpt_path}", flush=True)
 
-         # === ONLY CHANGE GPU FOR THIS SUBPROCESS ===
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(self.gpu)
         
@@ -209,7 +205,7 @@ class DualEvalCallback(TrainerCallback):
         # TSV file path
         csv_path = self.output_path
 
-        # Ensure header exists
+        # Ensure table header exists
         write_header = not os.path.exists(csv_path)
         
         model_name = os.path.basename(merged_path)
@@ -447,7 +443,6 @@ def main():
     else:
         dataset = loaded_datasets[0]
 
-    #shuffle the dataset
     dataset = dataset.shuffle(seed=42)
 
     print("Combined total size:", len(dataset))
@@ -457,7 +452,7 @@ def main():
 
 
     model_path = args.base_model_path
-    tokenizer_path = model_path #always take the base tokenizer, checkpoints dont contain one
+    tokenizer_path = model_path
 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
     tokenizer.pad_token = tokenizer.eos_token
@@ -482,7 +477,6 @@ def main():
     print("Max Train Token Length: ", train_max_length)
 
     def tokenize(example, max_length):
-        # 1. Full text
         text = format_example(example)
 
         tokens = tokenizer(
@@ -501,35 +495,25 @@ def main():
         text_index = text.find("### Response:\n")
         prompt = text[:text_index]
         result = text[text_index:]
-        #print("Prompt:\n", prompt)
-        #print("Result:\n", result)
 
         prompt_tokens = tokenizer(prompt)
         result_tokens = tokenizer(result)
-        #print("Tokenized Results: ", result_tokens)
 
         to_be_masked = len(prompt_tokens["input_ids"])
-        #print("Amount of tokens to be masked: ", to_be_masked)
 
         labels = tokens["input_ids"].copy()
         
-        #print(labels)
-        #print(tokenizer.decode(labels))
-
         #get the index of the first padding
         first_pad = labels.index(pad_id) if pad_id in labels else None
         
 
         for i in range(len(labels)):
-            #only mask
             if i < to_be_masked:
                 #should be masked
                 labels[i] = -100
             elif labels[i] == pad_id:
-                #is a padding -> should also be masked
                 labels[i] = -100
 
-        #set the first padding to unmasked, to tell the model when to stop
         labels[first_pad] = pad_id
 
 
@@ -548,8 +532,7 @@ def main():
         model_path,
         device_map=None,
         trust_remote_code=True,
-        torch_dtype="auto",  # automatically use float16 if supported    
-        #local_files_only=True
+        torch_dtype="auto",   
     )
 
     print("Loaded raw model..", flush=True)
@@ -557,9 +540,9 @@ def main():
 
     # Define LoRA configuration
     lora_config = LoraConfig(
-        r=32,                 # rank of LoRA matrices
-        lora_alpha=64,        # scaling factor
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj","gate_proj", "up_proj", "down_proj"], # this is experimental
+        r=32,                 
+        lora_alpha=64,      
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj","gate_proj", "up_proj", "down_proj"], 
         lora_dropout=0.05,
         bias="none",
         task_type=TaskType.CAUSAL_LM
@@ -624,7 +607,6 @@ def main():
         bf16 = torch.cuda.is_bf16_supported()
         fp16 = not bf16
 
-    # Training arguments
     training_args = TrainingArguments(
         output_dir=checkpoint_dir,
         per_device_train_batch_size=batch_size,

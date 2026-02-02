@@ -4,27 +4,17 @@ LABEL maintainer="Luis Drayer <luis.drayer@web.de>"
 ARG UID
 ARG GID
 
-# Create group
 RUN groupadd -g ${GID} appuser || true
-
-# Create user with the given UID/GID and proper shell
 RUN useradd -m -u ${UID} -g ${GID} -s /bin/bash appuser || true
-
-# Add passwd entry for your UID in case it matches an existing container user
 RUN echo "appuser:x:${UID}:${GID}:Container User:/home/appuser:/bin/bash" >> /etc/passwd || true
 
-
-# system deps
 RUN apt-get update && apt-get install -y make vim build-essential git wget curl python3.10 python3.10-venv python3-pip && rm -rf /var/lib/apt/lists/*
 
-
-# Install NVIDIA runtime utilities
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         nvidia-utils-525 \
         pciutils \
     && rm -rf /var/lib/apt/lists/*
-
 
 COPY venv_eval_requirements.txt venv_eval_requirements.txt
 COPY venv_train_requirements.txt venv_train_requirements.txt
@@ -37,17 +27,11 @@ RUN /opt/venv_eval/bin/python -m pip install --no-cache-dir --no-deps -r venv_ev
 
 RUN python3.10 -m venv /opt/venv_train
 RUN /opt/venv_train/bin/python -m pip install --upgrade pip setuptools wheel
-# RUN /opt/venv_train/bin/pip install \
-#     torch==2.2.1+cu118 \
-#     torchvision==0.17.1+cu118 \
-#     --index-url https://download.pytorch.org/whl/cu118
-# RUN /opt/venv_train/bin/pip install --no-deps torchaudio==2.2.0+cu118 --index-url https://download.pytorch.org/whl/cu118
- RUN /opt/venv_train/bin/pip install --no-cache-dir -r venv_train_requirements.txt
+RUN /opt/venv_train/bin/pip install --no-cache-dir -r venv_train_requirements.txt
 
 RUN python3.10 -m venv /opt/venv_refined
 RUN /opt/venv_refined/bin/python -m pip install --upgrade pip setuptools wheel
 RUN /opt/venv_refined/bin/python -m pip install --no-cache-dir -r venv_refined_requirements.txt
-
 
 WORKDIR /workspace
 
