@@ -167,7 +167,11 @@ def evaluate_dev_batch(mode, model_path, target_db, oracle_or_refined, batch_siz
     
         for item in batch:
             
-            utterance = item["utterance"]
+            utterance = item.get("utterance")
+            if not utterance:
+                print("No utterance in:")
+                print(item)
+                continue
             pid_mapping_list = item["refined_ned_results"] if oracle_or_refined == "refined" else item["oracle_ned_results"]
             prompt = build_prompt(utterance, pid_mapping_list)
             prompts.append(prompt)
@@ -403,186 +407,196 @@ def execute_predictions(model_path, target_db, wwq, name_to_pid_mapping, sparql_
     local_wikisp_match = 0
     total_non_empty = 0
     
+    #cursor = target_db.find(no_cursor_timeout=True)
+    docs = list(target_db.find())
+    try:
 
-    for i in target_db.find():
-        
-        key = i["id"]
-        print(i["utterance"])
-
-        if i["results"] == []:
-             print("skipped")
-             continue
+        for i in docs:
             
-        total += 1
+            key = i["id"]
+            print(i["utterance"])
 
-        # see if we have an existing result:        
-        found_prediction = None
-        if not overwrite_existing and "prediction_results" in i:
-            for existing_prediction in i["prediction_results"]:
-                if model_path == existing_prediction["model_path"]:
-                    found_prediction = existing_prediction
-                    print("use existing results for {}".format(i["id"]))
-                    break
+            if i["results"] == []:
+                #print("skipped")
+                #continue
+                pass
+            
+            total += 1
+            print(total)
+
+            # see if we have an existing result:        
+            found_prediction = None
+            if not overwrite_existing and "prediction_results" in i:
+                for existing_prediction in i["prediction_results"]:
+                    if model_path == existing_prediction["model_path"]:
+                        found_prediction = existing_prediction
+                        print("use existing results for {}".format(i["id"]))
+                        break
 
         
         
-        if found_prediction is not None and (not overwrite_existing or total < 800):
-            if compare_results(found_prediction["results"], i["results"]):
-                print("Results identical!")
-                exact_match += 1
+            if found_prediction is not None and (not overwrite_existing or total < 800):
+                if compare_results(found_prediction["results"], i["results"]):
+                    print("Results identical!")
+                    exact_match += 1
+                else:
+                    print("Results were not identical.")
+                    model_prediction = None
+                    for prediction in i["predictions"]:
+                        if prediction["model_path"] == model_path:
+                            model_prediction = prediction["sparql"]
+                            break
+                    print("Prediction: ")
+                    print_results(i, found_prediction["final_sparql"], model_prediction)
+                prediction_res = found_prediction["results"]
             else:
-                print("Results were not identical.")
-                model_prediction = None
+                found = False
                 for prediction in i["predictions"]:
                     if prediction["model_path"] == model_path:
-                        model_prediction = prediction["sparql"]
-                        break
-                print("Prediction: ")
-                print_results(i, found_prediction["final_sparql"], model_prediction)
-            prediction_res = found_prediction["results"]
-        else:
-            found = False
-            for prediction in i["predictions"]:
-                if prediction["model_path"] == model_path:
                     
-                    prediction_results, final_sparql = execute_predicted_sparql(prediction["sparql"], name_to_pid_mapping, sparql_results, qid_name_mapping)
+                        prediction_results, final_sparql = execute_predicted_sparql(prediction["sparql"], name_to_pid_mapping, sparql_results, qid_name_mapping)
 
-                    print("Getting Predictions:")    
-                    print("Predicted:\n" + final_sparql, flush=True)
+                        print("Getting Predictions:")    
+                        print("Predicted:\n" + final_sparql, flush=True)
                     
-                    import re
-                    gold_sparql = re.sub(r'(?is)^.*?(select)', r'\1', i["sparql"]).strip()
-                    print("Gold Answer:\n" + gold_sparql)
+                        import re
+                        gold_sparql = re.sub(r'(?is)^.*?(select)', r'\1', i["sparql"]).strip()
+                        print("Gold Answer:\n" + gold_sparql)
                     
-                    to_be_compared = i["results"]
+                        to_be_compared = i["results"]
                     
-                    if save_path:
-                        entry = {
-                            "dev_set_id": i["id"],
-                            "predicted_sparql": prediction["sparql"],
-                            "executable_sparql": final_sparql,
-                            "results": prediction_results
-                        }
+                        if save_path:
+                            entry = {
+                                "dev_set_id": i["id"],
+                                "predicted_sparql": prediction["sparql"],
+                                "executable_sparql": final_sparql
+  #                              "results": prediction_results
+                            }
                         
-                        #check if the document size would be larger than 16mb, as mongodb refuses such big docs
-                        MAX_DOC_SIZE = 16 * 1024 * 1024  # 16 MB
+                            #check if the document size would be larger than 16mb, as mongodb refuses such big docs
+                            MAX_DOC_SIZE = 16 * 1024 * 1024  # 16 MB
                         
-                        import json
-                        json_bytes = json.dumps(entry, ensure_ascii=False).encode("utf-8")
+                            import json
+                            json_bytes = json.dumps(entry, ensure_ascii=False).encode("utf-8")
 
-                        if len(json_bytes) > MAX_DOC_SIZE:
-                            print(f"\n  Model prediction result exceeded max length; saving without results.")
-                            entry["results"] = ["EXCEEDED_MAX_LENGTH"]
+                            if len(json_bytes) > MAX_DOC_SIZE:
+                                print(f"\n  Model prediction result exceeded max length; saving without results.")
+                                entry["results"] = ["EXCEEDED_MAX_LENGTH"]
 
-                        json_entries.append(entry)
+                            json_entries.append(entry)
 
-                    #as the KB has changed, get results on their sparql first to compare  august 2025 results
-                    if (wwq):
-                        res_2025 = execute_sparql(i["sparql"], sparql_results)
+                        #as the KB has changed, get results on their sparql first to compare  august 2025 results
+                        if (wwq):
+                            res_2025 = execute_sparql(i["sparql"], sparql_results)
                         
-                        to_be_compared = res_2025
+                            to_be_compared = res_2025
 
-                    if comparison_path:
+                        if comparison_path:
 
-                        #Get the prediction on the set, to see if the predictions are exactly the same
-                        key = i["id"]
+                            #Get the prediction on the set, to see if the predictions are exactly the same
+                            key = i["id"]
                               
-                        local_prediction = my_sparql_results.find_one({"dev_set_id":key})["executable_sparql"]
+                            local_prediction = my_sparql_results.find_one({"dev_set_id":key})["executable_sparql"]
                         
-                        local_res = execute_sparql(local_prediction, sparql_results)
-
-                        print("Comparing to prediction:\n" + local_prediction)
+                            local_res = execute_sparql(local_prediction, sparql_results)
+                            print("Comparing to prediction:\n" + local_prediction)
                         
-                        if local_res == [] and prediction_results == []:
-                            if final_sparql == local_prediction:
+                            if local_res == [] and prediction_results == []:
+                                if final_sparql == local_prediction:
+                                    local_wikisp_match += 1
+                                    total_non_empty += 1
+                                else:
+                                    print("Both Predictions empty with different query; skipping..")
+                        
+                            elif final_sparql == local_prediction or compare_results(local_res, prediction_results):
                                 local_wikisp_match += 1
                                 total_non_empty += 1
                             else:
-                                print("Both Predictions empty with different query; skipping..")
-                        
-                        elif final_sparql == local_prediction or compare_results(local_res, prediction_results):
-                            local_wikisp_match += 1
-                            total_non_empty += 1
-                        else:
-                            total_non_empty += 1
+                                total_non_empty += 1
                     
-                    if final_sparql == gold_sparql or compare_results(prediction_results, to_be_compared):    
-                        print("Match", flush=True)
-                        exact_match += 1
-                    else:
-                        print("Wrong", flush=True)
+                        if final_sparql == gold_sparql or compare_results(prediction_results, to_be_compared):    
+                            print("Match", flush=True)
+                            exact_match += 1
+                        else:
+                            print("Wrong", flush=True)
 
-                    found = True
-                    break
+                        found = True
+                        break
 
-            if not found:
-                print("{} no prediction".format(prediction))
-                raise ValueError
+                if not found:
+                    print("{} no prediction".format(prediction))
+                    raise ValueError
                 
-            prediction_results_db = {
-                "model_path": model_path,
-                "final_sparql": final_sparql,
-                "results": prediction_results
-            }
-            old_prediction_results = []
-            if "prediction_results" in i:
-                for old_prediction_result in i["prediction_results"]:
-                    if old_prediction_result["model_path"] != model_path:
-                        old_prediction_results.append(old_prediction_result)
+                prediction_results_db = {
+                    "model_path": model_path,
+                    "final_sparql": final_sparql,
+                    "results": prediction_results
+                }
+                old_prediction_results = []
+                if "prediction_results" in i:
+                    for old_prediction_result in i["prediction_results"]:
+                        if old_prediction_result["model_path"] != model_path:
+                            old_prediction_results.append(old_prediction_result)
             
-            try:
-                target_db.update_one({
-                    "_id": i["_id"],
-                }, {
-                    "$set": {
-                        "prediction_results": [prediction_results_db] + old_prediction_results
-                    }
-                })
-            except Exception:
-                pass
+                try:
+                    target_db.update_one({
+                        "_id": i["_id"],
+                    }, {
+                        "$set": {
+                            "prediction_results": [prediction_results_db] + old_prediction_results
+                        }
+                    })
+                except Exception:
+                    pass
             
-            prediction_res = prediction_results
+                prediction_res = prediction_results
+      
+            gold_res = to_be_compared
+
+            #normalize, because qald10 has things other than urls and the var name differs
+            pred = normalize(prediction_res)
+            gold = normalize(gold_res)
+
+            print("###########################PredRes###############################")
+            print(pred)
+            print("###########################GoldRes###############################")
+            print(gold)
+            print("#################################################################")
         
-        gold_res = to_be_compared
-
-        #normalize, because qald10 has things other than urls and the var name differs
-        pred = normalize(prediction_res)
-        gold = normalize(gold_res)
-
-        print("###########################PredRes###############################")
-        print(pred)
-        print("###########################GoldRes###############################")
-        print(gold)
-        print("#################################################################")
-        
 
 
-        if type(gold_res) == bool or type(prediction_res) == bool:
-            total_F1_score += 1 if gold_res == prediction_res else 0
-        else:
-            
-            #both gold and predicted results are emtpy -> 100% overlap between predictions
-            if len(gold) == 0 and len(pred) == 0:
-                total_F1_score += 1
-                continue
-
-            true_positive = [x for x in pred if x in gold]
-            false_positive = [x for x in pred if x not in gold]
-            false_negative = [x for x in gold if x not in pred]
-            
-            precision = safe_divide(len(true_positive), len(true_positive) + len(false_positive))
-            recall    = safe_divide(len(true_positive), len(true_positive) + len(false_negative))
-            if precision + recall == 0:
-                this_f1 = 0
+            if type(gold_res) == bool or type(prediction_res) == bool:
+                total_F1_score += 1 if gold_res == prediction_res else 0
             else:
-                this_f1 = 2 * precision * recall / (precision + recall)
-            total_F1_score += this_f1
+            
+                #both gold and predicted results are emtpy -> 100% overlap between predictions
+                if len(gold) == 0 and len(pred) == 0:
+                    total_F1_score += 1
+                    continue
 
-        print("accuracy: {}/{} = {}".format(exact_match, total, exact_match/total), flush=True)
-        print("F1 = {}".format(total_F1_score / total), flush=True)
-        if comparison_path: 
-            print("local comparison acc: {}/{} = {}".format(local_wikisp_match, total_non_empty, local_wikisp_match/total_non_empty))
-        print()
+                true_positive = [x for x in pred if x in gold]
+                false_positive = [x for x in pred if x not in gold]
+                false_negative = [x for x in gold if x not in pred]
+            
+                precision = safe_divide(len(true_positive), len(true_positive) + len(false_positive))
+                recall    = safe_divide(len(true_positive), len(true_positive) + len(false_negative))
+                if precision + recall == 0:
+                    this_f1 = 0
+                else:
+                    this_f1 = 2 * precision * recall / (precision + recall)
+                total_F1_score += this_f1
+
+            print("accuracy: {}/{} = {}".format(exact_match, total, exact_match/total), flush=True)
+            print("F1 = {}".format(total_F1_score / total), flush=True)
+            if comparison_path: 
+                print("local comparison acc: {}/{} = {}".format(local_wikisp_match, total_non_empty, local_wikisp_match/total_non_empty))
+            print()
+
+
+    finally:
+        #cursor.close()
+        pass
+
 
     if save_path:
         import json

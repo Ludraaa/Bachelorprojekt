@@ -41,7 +41,7 @@ def main():
     test_path = os.path.join(args.output_dir, "test_split.jsonl")
 
     print("Splitting dataset and saving new JSONL files...")
-    dataset = load_dataset("json", data_files=os.path.join(args.input_file_path), split="train", cache_dir="/workspace/.hf-cache")
+    dataset = load_dataset("json", data_files=os.path.join(args.input_file_path), split="train", cache_dir=".hf-cache")
    
     test_valid = dataset.train_test_split(test_size=args.test_ratio, seed=42)
 

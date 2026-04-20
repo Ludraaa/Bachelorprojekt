@@ -621,6 +621,8 @@ def main():
         save_total_limit=100,
         warmup_ratio=0.03,
         report_to="none",
+        save_safetensors=True,
+        optim="adamw_torch"
     )
     
     trainer = None
@@ -640,7 +642,13 @@ def main():
             train_dataset=tokenized_dataset,
         )
 
-    if True:
+    resume_checkpoint = get_latest_checkpoint(checkpoint_dir)
+
+    if resume_checkpoint:
+        print(f"Resuming training from checkpoint: {resume_checkpoint}...")
+        trainer.train(resume_from_checkpoint=resume_checkpoint)
+    else:
+        print("Training from scratch..")
         trainer.train()
 
 if __name__ == "__main__":

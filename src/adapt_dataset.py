@@ -83,7 +83,7 @@ def main(refined):
                 return res
 
             except requests.exceptions.HTTPError as err:
-                if r.status_code in (500, 400):
+                if r.status_code in (500, 400, 502):
                     print(f"Caught {r.status_code} Server Error:", err)
                     return []
                 elif r.status_code == 429:
@@ -268,12 +268,12 @@ def main(refined):
                 #Get wikidata results:
                 res = execute_sparql(canonical_sparql)
                 question_only = input_field.replace("Query:", "", 1).split("\n")[0].strip().replace("Query:", "", 1).strip()
-
+                
                 out = {
                         "id" : rec.get("id", ""),
                         "utterance": question_only,
                         "sparql": canonical_sparql,
-                        "results": res
+                        "results": [] #res
                 }
 
             #check if the document size would be larger than 16mb, as mongodb refuses such big docs
@@ -281,16 +281,16 @@ def main(refined):
 
             json_bytes = json.dumps(out, ensure_ascii=False).encode("utf-8")
                 
-            if len(json_bytes) > MAX_DOC_SIZE:
-                print(f"\n Skipping oversized sample ({len(json_bytes)/1024/1024:.2f} MB): {rec.get('id', 'unknown')}")
-                if "utterance" in out:
-                    print("Utterance:", out["utterance"])
-                elif "input" in out:
-                    print("Input:", out["input"])
-                else:
-                    print("No utterance/input found.")
-                print("-" * 80)
-                continue
+            #if len(json_bytes) > MAX_DOC_SIZE:
+            #    print(f"\n Skipping oversized sample ({len(json_bytes)/1024/1024:.2f} MB): {rec.get('id', 'unknown')}")
+            #    if "utterance" in out:
+            #        print("Utterance:", out["utterance"])
+            #    elif "input" in out:
+            #        print("Input:", out["input"])
+            #    else:
+            #        print("No utterance/input found.")
+            #    print("-" * 80)
+            #    continue
 
             fout.write(json.dumps(out, ensure_ascii=False) + "\n")
 

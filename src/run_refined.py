@@ -60,7 +60,11 @@ def do_ned_for_dev(refined, target_db, mode, qid_name_mapping):
             if "refined_ned_results" in i and i["refined_ned_results"]:
                 continue  # skip already processed
 
-            utterance = i["utterance"]
+            utterance = i.get("utterance")
+            
+            if not utterance:
+                continue
+
             pid_mapping_list = list(refined_ned(refined, utterance, qid_name_mapping))
             target_db.update_one({
                 "_id": i["_id"]
